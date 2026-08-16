@@ -1,6 +1,6 @@
 # Pairing autodidact with a skill-creator
 
-Autodidact's guard step (see `SKILL.md` → "Skill guard") reviews every drafted skill against a `skill-creator` skill before staging it. Autodidact does not bundle a `skill-creator` itself — it is a separate, actively-maintained skill you fork or write once per project, and reuse across every autodidact proposal.
+Autodidact's guard step (see `SKILL.md` → "Skill guard") reviews every drafted skill against a `skill-creator` skill before staging it. Autodidact does not bundle a `skill-creator` itself — it is a separate, actively-maintained skill you fork or write once per project, and reuse across every autodidact proposal. Any `skill-creator` that authors [agentskills.io](https://agentskills.io)-compliant `SKILL.md` files works here, regardless of which agent it was originally written for.
 
 ## Fork an existing skill-creator
 

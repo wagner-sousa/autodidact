@@ -6,7 +6,7 @@ description: "Procedural memory self-improvement loop (Hermes-style skill_manage
 # Autodidact — Procedural Memory Loop
 
 This skill activates after complex turns to evaluate whether the work just done should be persisted as a new skill or a patch to an existing one.
-It is the Claude Code equivalent of Hermes Agent's `skill_manage` tool + `write_approval` gate.
+It is the [agentskills.io](https://agentskills.io) equivalent of Hermes Agent's `skill_manage` tool + `write_approval` gate — agent-agnostic by design, tested primarily on Claude Code but portable to any agent that supports the SKILL.md spec plus equivalent hooks.
 
 ## When this skill fires
 
@@ -30,7 +30,7 @@ If two or more answers are "yes", propose. Otherwise, skip silently.
 
 Same six actions Hermes' `skill_manage` tool exposes. Pick the narrowest one that fits — `patch` is preferred over `edit` for the same reason a diff beats a rewrite: cheaper to review, less drift.
 
-| Action | When | Claude Code equivalent |
+| Action | When | Filesystem equivalent |
 |---|---|---|
 | `create` | No existing skill owns the topic and it is broad enough to recur | new `<name>/SKILL.md` |
 | `patch` | An existing skill owns the topic; adding a section/reference file is enough | `Edit`/`Write` inside that skill's dir |
@@ -56,7 +56,7 @@ Read the current skill index before deciding: list `.claude/skills/` and skim th
 Before staging any `create`, `patch`, or `edit` proposal, run the drafted `SKILL.md` content past a `skill-creator` skill for a structural review — this is our stand-in for Hermes' guard, which snapshots and reverts malformed skills. See [SKILL_CREATOR.md](SKILL_CREATOR.md) for how to get a `skill-creator` skill (fork Anthropic's or OpenAI's implementation) into your project. Because `skill-creator` is typically an interactive draft→test→review flow, not a headless validator, invoke it through a subagent instead of inline:
 
 1. Write the drafted `SKILL.md` (and any reference files) to a temp path — same content you're about to stage.
-2. Launch a subagent (`Agent` tool, fresh general-purpose agent) with a self-contained prompt: review the temp files against your `skill-creator`'s conventions (language, frontmatter shape, description quality/triggers, no orphaned references, scope/size sanity). Ask it to report pass/fail plus concrete fixes, not to rewrite the skill itself.
+2. Launch a subagent (a fresh general-purpose one — Claude Code's `Agent` tool, or your agent's equivalent spawn mechanism) with a self-contained prompt: review the temp files against your `skill-creator`'s conventions (language, frontmatter shape, description quality/triggers, no orphaned references, scope/size sanity). Ask it to report pass/fail plus concrete fixes, not to rewrite the skill itself.
 3. If the guard reports problems, fix the temp files before staging. If it passes (or the subagent errors out — don't block on infra flakiness), proceed to staging below.
 
 Skip the guard only for `delete`/`remove_file` (nothing to validate) and for trivial `write_file` additions (e.g. a reference doc, not `SKILL.md` itself). If your project has no `skill-creator` skill installed, skip the guard entirely rather than blocking the proposal.

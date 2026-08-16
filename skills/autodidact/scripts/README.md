@@ -1,6 +1,6 @@
 # autodidact hook wiring
 
-Four scripts, tool-agnostic in logic:
+These scripts implement autodidact's side of the loop: any [agentskills.io](https://agentskills.io)-compatible agent that exposes Stop/UserPromptSubmit/SessionStart-equivalent hooks can drive them. Four scripts, tool-agnostic in logic:
 
 - `detect_complexity.py` — Stop hook. Reads the hook JSON payload from stdin, needs `transcript_path` (path to the JSONL conversation transcript). Counts `tool_use` blocks in the last turn; if >= threshold, writes `.state/pending.json`. This is a cheap backstop only — the real trigger is the agent's own end-of-task judgment (see `SKILL.md`).
 - `inject_reminder.sh` — UserPromptSubmit hook. If `.state/pending.json` exists, prints the skill_manage trigger text (consumed as injected context) and deletes the marker.
@@ -35,7 +35,7 @@ Precedence: `SKILL_MANAGE_THRESHOLD` env var > `config.json["trigger"]` > defaul
 
 Override per-proposal with `pending.py new --scope project|user` (does not touch `config.json`, applies to that one entry only — the scope is recorded in the manifest and reused at `approve` time).
 
-## Claude Code
+## Claude Code (reference implementation)
 
 Add to `.claude/settings.json`:
 
@@ -77,4 +77,4 @@ If the host's transcript format differs, only `last_turn_tool_calls()` in `detec
 cp -r skills/autodidact <target-project>/.claude/skills/
 ```
 
-Then add the hook entries above to the target project's settings.
+The path `.claude/skills/` above is Claude Code's layout. For other agents, copy to wherever their skills directory lives and adjust the hook command paths accordingly.

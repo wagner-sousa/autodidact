@@ -1,6 +1,6 @@
 ---
 disable-model-invocation: true
-description: 'Health report for the skills in .claude/skills/ — stale, bloated, unmeasured, orphaned, structurally invalid, and pairs that are candidates for consolidation. Read-only: reports and proposes, never edits or removes a skill.'
+description: 'Health report for the project skill library — stale, bloated, unmeasured, orphaned, structurally invalid, and pairs that are candidates for consolidation. Read-only: reports and proposes, never edits or removes a skill.'
 argument-hint: '[cutoff days for "stale" | skill name to focus on]'
 allowed-tools: [
   'Read',

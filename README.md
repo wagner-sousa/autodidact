@@ -1,11 +1,11 @@
 # autodidact
 
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Plugin](https://img.shields.io/badge/type-Claude%20Code%20plugin-6E56CF?style=for-the-badge)
+[![agentskills.io](https://img.shields.io/badge/agentskills.io-compatible-FF6B35?style=for-the-badge&logo=bookstack&logoColor=white)](https://agentskills.io)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)
 
-> A procedural-memory self-improvement loop for Claude Code, modeled on Hermes Agent's `skill_manage` tool and its `write_approval` gate.
+> A procedural-memory self-improvement loop for any [agentskills.io](https://agentskills.io)-compatible AI coding agent, modeled on Hermes Agent's `skill_manage` tool and its `write_approval` gate.
 
 ---
 
@@ -37,19 +37,20 @@ Six proposal actions, mirroring Hermes' `skill_manage`: `create`, `patch`, `edit
 
 ## Technologies
 
+- **[agentskills.io](https://agentskills.io) SKILL.md format** — the plugin is
+  agent-agnostic by design: it targets any agent (Claude Code, OpenCode, or otherwise)
+  that supports this open skill spec plus Stop/UserPromptSubmit/SessionStart-equivalent
+  hooks.
 - **Python 3** — hook logic and the pending-queue CLI (`pending.py`,
   `detect_complexity.py`), stdlib only, no dependencies.
-- **Claude Code** — skills (`SKILL.md`), hooks (`Stop`, `UserPromptSubmit`,
-  `SessionStart`), slash commands.
 - **Bash** — hook wiring scripts (`inject_reminder.sh`, `list_pending.sh`).
-- **agentskills.io SKILL.md format** — the plugin is portable to any agent that
-  supports it plus Stop/UserPromptSubmit/SessionStart-equivalent hooks.
 
 ---
 
 ## Prerequisites
 
-- Claude Code (or another agentskills.io-compatible agent with equivalent hooks).
+- Any [agentskills.io](https://agentskills.io)-compatible AI coding agent with
+  Stop/UserPromptSubmit/SessionStart-equivalent hooks (e.g. Claude Code, OpenCode).
 - Python 3, available on `PATH` as `python`.
 - Bash, for the two shell hooks.
 - Optionally, a `skill-creator` skill installed in your project — see
@@ -69,6 +70,9 @@ cd autodidact
 
 ### Copy the plugin into your project
 
+Paths below use Claude Code's layout as the example — swap `.claude/` for your
+agent's own skills/commands directory if it differs.
+
 ```bash
 cp -r skills/autodidact <your-project>/.claude/skills/
 cp commands/*.md <your-project>/.claude/commands/
@@ -76,16 +80,18 @@ cp commands/*.md <your-project>/.claude/commands/
 
 ### Wire the hooks
 
-`hooks/hooks.json` contains the ready-to-use hook block. Merge it into your
-project's `.claude/settings.json`:
+`hooks/hooks.json` contains the ready-to-use Stop/UserPromptSubmit/SessionStart
+block. Merge it into your agent's hook config (`.claude/settings.json` for Claude
+Code; check `skills/autodidact/scripts/README.md` for other agents):
 
 ```bash
 cp hooks/hooks.json <your-project>/.claude/hooks.json
-# then merge the "hooks" key into .claude/settings.json — or point Claude Code
-# at .claude/hooks.json directly if your settings format supports it.
+# then merge the "hooks" key into .claude/settings.json — or point your agent
+# at .claude/hooks.json directly if its settings format supports it.
 ```
 
-See `skills/autodidact/scripts/README.md` for the full explanation of each hook.
+See `skills/autodidact/scripts/README.md` for the full explanation of each hook,
+including non-Claude-Code agents.
 
 ---
 
