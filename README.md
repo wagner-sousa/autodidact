@@ -2,7 +2,8 @@
 
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 ![Plugin](https://img.shields.io/badge/type-Claude%20Code%20plugin-6E56CF?style=for-the-badge)
-![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)
 
 > A procedural-memory self-improvement loop for Claude Code, modeled on Hermes Agent's `skill_manage` tool and its `write_approval` gate.
 
