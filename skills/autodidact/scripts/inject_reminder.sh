@@ -11,8 +11,8 @@ if [[ ! -f "$MARKER" ]]; then
     exit 0
 fi
 
-TOOL_COUNT=$(python3 -c "import json,sys; d=json.load(open('$MARKER')); print(d['tool_call_count'])" 2>/dev/null || echo "?")
-TOOLS=$(python3 -c "import json,sys; d=json.load(open('$MARKER')); print(', '.join(d['tools_used'][:6]))" 2>/dev/null || echo "")
+TOOL_COUNT=$(python -c "import json,sys; d=json.load(open('$MARKER')); print(d['tool_call_count'])" 2>/dev/null || echo "?")
+TOOLS=$(python -c "import json,sys; d=json.load(open('$MARKER')); print(', '.join(d['tools_used'][:6]))" 2>/dev/null || echo "")
 
 rm -f "$MARKER"
 

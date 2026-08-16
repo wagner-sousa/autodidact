@@ -44,7 +44,7 @@ Add to `.claude/settings.json`:
   "hooks": {
     "Stop": [
       { "hooks": [
-        { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/detect_complexity.py" }
+        { "type": "command", "command": "python .claude/skills/autodidact/scripts/detect_complexity.py" }
       ]}
     ],
     "UserPromptSubmit": [

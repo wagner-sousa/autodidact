@@ -66,7 +66,7 @@ Skip the guard only for `delete`/`remove_file` (nothing to validate) and for tri
 Stage a pending entry instead of writing directly and instead of blocking the turn on a yes/no — this is the async approval queue Hermes uses (`write_approval`), not a synchronous prompt. Write the proposed content to a temp file, then stage it:
 
 ```bash
-python3 .claude/skills/autodidact/scripts/pending.py new \
+python .claude/skills/autodidact/scripts/pending.py new \
   --action patch --target <skill-name> \
   --summary "one line: what and why" \
   --file "references/new-doc.md=/tmp/staged-content.md"
@@ -75,7 +75,7 @@ python3 .claude/skills/autodidact/scripts/pending.py new \
 `pending.py new` behaves according to `config.json`'s `write_approval`:
 - `true` (queue, default) — prints the entry id. Tell the user, in one line, that a proposal was staged and how to act on it — don't wait for a reply before moving on:
   ```
-  autodidact: staged <action> for <skill-name> (id <id>) — "python3 .claude/skills/autodidact/scripts/pending.py show <id>" to review, "approve <id>" / "reject <id>" to decide, whenever convenient.
+  autodidact: staged <action> for <skill-name> (id <id>) — "python .claude/skills/autodidact/scripts/pending.py show <id>" to review, "approve <id>" / "reject <id>" to decide, whenever convenient.
   ```
 - `false` (auto-apply) — the write already happened. Always tell the user in one line what changed, right after the call:
   ```
@@ -89,8 +89,8 @@ For `create`, `edit`, and `write_file`, `--file` can be repeated for multiple fi
 
 Never write to `.claude/skills/` outside this queue. The pending queue survives restarts (`.state/pending/`, gitignored) and is surfaced automatically at `SessionStart` (`scripts/list_pending.sh`) so nothing gets lost between sessions.
 
-- **Approve**: `python3 .claude/skills/autodidact/scripts/pending.py approve <id>` — applies the staged files/removal to `.claude/skills/`.
-- **Reject**: `python3 .claude/skills/autodidact/scripts/pending.py reject <id>` — discards, no trace left.
+- **Approve**: `python .claude/skills/autodidact/scripts/pending.py approve <id>` — applies the staged files/removal to `.claude/skills/`.
+- **Reject**: `python .claude/skills/autodidact/scripts/pending.py reject <id>` — discards, no trace left.
 - If the user asks to see or decide on a proposal in conversation ("approve skill X", "what's pending"), run `pending.py list`/`show`/`approve`/`reject` on their behalf rather than making them type the command.
 - After an approval that touches tracked files, follow the project's commit convention if the user wants it committed — don't commit unprompted.
 

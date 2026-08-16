@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Stop hook: count tool calls in the last agent turn and stage a
 skill_manage review trigger when the turn was complex enough to be worth it.
 
