@@ -2,6 +2,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 ![Plugin](https://img.shields.io/badge/type-Claude%20Code%20plugin-6E56CF?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
 > A procedural-memory self-improvement loop for Claude Code, modeled on Hermes Agent's `skill_manage` tool and its `write_approval` gate.
 
@@ -35,10 +36,10 @@ Six proposal actions, mirroring Hermes' `skill_manage`: `create`, `patch`, `edit
 
 ## Technologies
 
-- **Claude Code** — skills (`SKILL.md`), hooks (`Stop`, `UserPromptSubmit`,
-  `SessionStart`), slash commands.
 - **Python 3** — hook logic and the pending-queue CLI (`pending.py`,
   `detect_complexity.py`), stdlib only, no dependencies.
+- **Claude Code** — skills (`SKILL.md`), hooks (`Stop`, `UserPromptSubmit`,
+  `SessionStart`), slash commands.
 - **Bash** — hook wiring scripts (`inject_reminder.sh`, `list_pending.sh`).
 - **agentskills.io SKILL.md format** — the plugin is portable to any agent that
   supports it plus Stop/UserPromptSubmit/SessionStart-equivalent hooks.
@@ -74,30 +75,16 @@ cp commands/*.md <your-project>/.claude/commands/
 
 ### Wire the hooks
 
-Merge these entries into your project's `.claude/settings.json` (see
-`skills/autodidact/scripts/README.md` for the full explanation of each hook):
+`hooks/hooks.json` contains the ready-to-use hook block. Merge it into your
+project's `.claude/settings.json`:
 
-```json
-{
-  "hooks": {
-    "Stop": [
-      { "hooks": [
-        { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/detect_complexity.py" }
-      ]}
-    ],
-    "UserPromptSubmit": [
-      { "hooks": [
-        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" }
-      ]}
-    ],
-    "SessionStart": [
-      { "hooks": [
-        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/list_pending.sh" }
-      ]}
-    ]
-  }
-}
+```bash
+cp hooks/hooks.json <your-project>/.claude/hooks.json
+# then merge the "hooks" key into .claude/settings.json — or point Claude Code
+# at .claude/hooks.json directly if your settings format supports it.
 ```
+
+See `skills/autodidact/scripts/README.md` for the full explanation of each hook.
 
 ---
 
@@ -149,6 +136,9 @@ autodidact/
 │   ├── skill-learn.md             # /skill-learn
 │   ├── skill-fork.md              # /skill-fork
 │   └── skills-curator.md          # /skills-curator
+├── hooks/
+│   └── hooks.json                 # ready-to-merge Stop/UserPromptSubmit/SessionStart block
+├── LICENSE
 └── README.md
 ```
 

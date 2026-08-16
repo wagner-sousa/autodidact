@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [
+        { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/detect_complexity.py" }
+      ]}
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [
+        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" }
+      ]}
+    ],
+    "SessionStart": [
+      { "hooks": [
+        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/list_pending.sh" }
+      ]}
+    ]
+  }
+}
