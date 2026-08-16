@@ -7,21 +7,6 @@
 
 ---
 
-## Table of Contents
-
-- [About](#about)
-- [Technologies](#technologies)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [Usage](#usage)
-- [Architecture](#architecture)
-- [License](#license)
-- [Contact](#contact)
-
----
-
 ## About
 
 At the end of a task, autodidact asks: *did we just learn something worth not
