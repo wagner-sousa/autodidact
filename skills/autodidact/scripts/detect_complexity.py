@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Stop hook: count tool calls in the last agent turn and stage a
+skill_manage review trigger when the turn was complex enough to be worth it.
+
+Reads the hook payload (JSON) from stdin. Claude Code passes at least
+`transcript_path` and `session_id` on the Stop event. Writes a marker file
+that the companion UserPromptSubmit hook (inject_reminder.sh) reads and
+consumes on the next turn.
+"""
+import json
+import os
+import sys
+
+SKILL_DIR = os.path.join(os.path.dirname(__file__), "..")
+STATE_DIR = os.path.join(SKILL_DIR, ".state")
+CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
+DEFAULT_TRIGGER = {
+    "min_tool_calls": 5,
+    "min_file_edits": 2,
+    "readonly_threshold": 12,
+}
+EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
+
+
+def get_trigger_config():
+    """Precedence: SKILL_MANAGE_THRESHOLD env var (overrides min_tool_calls only) > config.json["trigger"] > defaults."""
+    trigger = dict(DEFAULT_TRIGGER)
+
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH) as f:
+                cfg = json.load(f)
+            trigger.update(cfg.get("trigger", {}))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            pass
+
+    env_value = os.environ.get("SKILL_MANAGE_THRESHOLD")
+    if env_value:
+        try:
+            trigger["min_tool_calls"] = int(env_value)
+        except ValueError:
+            pass
+
+    return trigger
+
+
+def should_fire(count, edit_count, trigger):
+    """Two independent paths, mirroring self-improving-skills' tool-calls vs
+    readonly split: an edit-heavy turn fires on a lower bar than a pure
+    read/investigation turn, which needs more evidence before proposing."""
+    if edit_count >= trigger["min_file_edits"] and count >= trigger["min_tool_calls"]:
+        return True
+    if edit_count == 0 and count >= trigger["readonly_threshold"]:
+        return True
+    return False
+
+
+def last_turn_tool_calls(transcript_path):
+    """Count tool_use blocks emitted since the last user message."""
+    if not transcript_path or not os.path.exists(transcript_path):
+        return 0, []
+
+    tool_names = []
+
+    with open(transcript_path, "r") as f:
+        lines = f.readlines()
+
+    # Walk backwards until we cross a user (non-tool-result) message —
+    # that marks the start of the current turn.
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        msg = entry.get("message", {})
+        role = msg.get("role")
+
+        if role == "user":
+            content = msg.get("content", "")
+            is_tool_result = isinstance(content, list) and any(
+                block.get("type") == "tool_result" for block in content
+            )
+            if not is_tool_result:
+                break
+
+        if role == "assistant":
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if block.get("type") == "tool_use":
+                        tool_names.append(block.get("name", "?"))
+
+    return len(tool_names), tool_names
+
+
+def main():
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        payload = {}
+
+    transcript_path = payload.get("transcript_path")
+    count, tool_names = last_turn_tool_calls(transcript_path)
+    edit_count = sum(1 for name in tool_names if name in EDIT_TOOLS)
+    trigger = get_trigger_config()
+
+    if not should_fire(count, edit_count, trigger):
+        return
+
+    os.makedirs(STATE_DIR, exist_ok=True)
+    marker_path = os.path.join(STATE_DIR, "pending.json")
+    with open(marker_path, "w") as f:
+        json.dump(
+            {
+                "tool_call_count": count,
+                "edit_count": edit_count,
+                "tools_used": tool_names,
+            },
+            f,
+        )
+
+
+if __name__ == "__main__":
+    main()
