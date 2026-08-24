@@ -1,9 +1,10 @@
 # autodidact hook wiring
 
-These scripts implement autodidact's side of the loop: any [agentskills.io](https://agentskills.io)-compatible agent that exposes Stop/UserPromptSubmit/SessionStart-equivalent hooks can drive them. Four scripts, tool-agnostic in logic:
+These scripts implement autodidact's side of the loop: any [agentskills.io](https://agentskills.io)-compatible agent that exposes Stop/UserPromptSubmit/SessionStart-equivalent hooks can drive them. Five scripts, tool-agnostic in logic:
 
 - `detect_complexity.py` — Stop hook. Reads the hook JSON payload from stdin, needs `transcript_path` (path to the JSONL conversation transcript). Counts `tool_use` blocks in the last turn; if >= threshold, writes `.state/pending.json`. This is a cheap backstop only — the real trigger is the agent's own end-of-task judgment (see `SKILL.md`).
 - `inject_reminder.sh` — UserPromptSubmit hook. If `.state/pending.json` exists, prints the skill_manage trigger text (consumed as injected context) and deletes the marker.
+- `detect_domain_recurrence.py` — UserPromptSubmit hook. Reads the hook JSON payload from stdin, needs `prompt` (the user's message text). Catches the case `detect_complexity.py` can't: several small, individually-cheap turns asking about the same uncovered domain in a row, none of which alone crosses the tool-call threshold. Matches known domain terms against the prompt text and tracks per-domain mention counts in `.state/domain_mentions.json`; fires a reminder at every multiple of `min_mentions` for a domain still lacking a `.claude/skills/<name>/` directory, and resets the counter once that skill exists. See "Domain recurrence" below.
 - `pending.py` — CLI for the async approval queue (`new`/`list`/`show`/`approve`/`reject`). Mirrors Hermes' `write_approval` staging: proposals land in `.state/pending/<id>/` and survive restarts until approved or rejected.
 - `list_pending.sh` — SessionStart hook. Prints any pending proposals so they aren't forgotten between sessions.
 
@@ -35,6 +36,19 @@ Precedence: `SKILL_MANAGE_THRESHOLD` env var > `config.json["trigger"]` > defaul
 
 Override per-proposal with `pending.py new --scope project|user` (does not touch `config.json`, applies to that one entry only — the scope is recorded in the manifest and reused at `approve` time).
 
+### Domain recurrence
+
+`config.json`'s `"domain_recurrence"` object (tracked in git, project-wide default):
+```json
+{"domain_recurrence": {"min_mentions": 3, "known_domains": []}}
+```
+- `min_mentions` — how many times a domain can be mentioned (without an owning skill) before a reminder fires. Fires again every `min_mentions` after that (3, 6, 9...) so it doesn't nag every turn.
+- `known_domains` — extra terms to watch beyond what's auto-discovered. Accepts plain strings (`"mercadopago"`) or `{term: skill_dir_name}` maps when the spoken term differs from the skill's directory name (`{"nota fiscal": "fiscal"}`).
+
+Auto-discovery: `detect_domain_recurrence.py` looks for `src/Uoou/Component/Integration/` relative to the project root (Sylius/Symfony layout) and treats each subdirectory as a domain, stripping a trailing version suffix (`BlingV3` -> `bling`). Projects without that layout should rely on `known_domains` instead — the auto-discovery step is a no-op if the directory isn't found.
+
+State lives in `.state/domain_mentions.json`, one counter per domain; it resets automatically once `.claude/skills/<domain>/` exists.
+
 ## Claude Code (reference implementation)
 
 Add to `.claude/settings.json`:
@@ -49,7 +63,8 @@ Add to `.claude/settings.json`:
     ],
     "UserPromptSubmit": [
       { "hooks": [
-        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" }
+        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" },
+        { "type": "command", "command": "python .claude/skills/autodidact/scripts/detect_domain_recurrence.py" }
       ]}
     ],
     "SessionStart": [

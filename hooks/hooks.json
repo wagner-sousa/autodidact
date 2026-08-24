@@ -7,7 +7,8 @@
     ],
     "UserPromptSubmit": [
       { "hooks": [
-        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" }
+        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" },
+        { "type": "command", "command": "python .claude/skills/autodidact/scripts/detect_domain_recurrence.py" }
       ]}
     ],
     "SessionStart": [

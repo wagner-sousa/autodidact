@@ -10,10 +10,11 @@ It is the [agentskills.io](https://agentskills.io) equivalent of Hermes Agent's 
 
 ## When this skill fires
 
-Two paths, and both are valid — this mirrors how Hermes actually works: the trigger is the agent's own judgment, not a fixed rule. `write_approval: true` gates the write, not the decision to propose.
+Three paths, and all are valid — this mirrors how Hermes actually works: the trigger is the agent's own judgment, not a fixed rule. `write_approval: true` gates the write, not the decision to propose.
 
 1. **Your own judgment (primary).** At the natural end of any task, ask yourself the questions below regardless of whether a hook fired. A workflow can be worth capturing after 2 tool calls (a genuinely tricky one-liner) or not worth it after 15 (repetitive, uninteresting). Don't wait for permission to evaluate.
 2. **The Stop hook nudge (backstop, cheap and dumb on purpose).** `scripts/detect_complexity.py` counts `tool_use` blocks in the transcript and injects a reminder past a threshold. It exists only to catch cases where you finished a complex turn and moved on without pausing to reflect — it is not a substitute for judgment, and a turn crossing the threshold does not mean you must propose something.
+3. **The domain-recurrence nudge (backstop for spread-out, individually-cheap turns).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. See `scripts/README.md` for configuration.
 
 ## Evaluation checklist
 
