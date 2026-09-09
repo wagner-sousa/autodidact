@@ -6,7 +6,7 @@ These scripts implement autodidact's side of the loop: any [agentskills.io](http
 - `inject_reminder.py` — UserPromptSubmit hook. If `.state/pending.json` exists, prints the skill_manage trigger text (consumed as injected context) and deletes the marker.
 - `detect_domain_recurrence.py` — UserPromptSubmit hook. Reads the hook JSON payload from stdin, needs `prompt` (the user's message text). Catches the case `detect_complexity.py` can't: several small, individually-cheap turns asking about the same uncovered domain in a row, none of which alone crosses the tool-call threshold. Matches known domain terms against the prompt text and tracks per-domain mention counts in `.state/domain_mentions.json`; once a domain hits `min_mentions` without a `.claude/skills/<name>/` directory, self-stages a skeleton `create` proposal via `pending.py` (deduplicated per domain) and fires a reminder pointing at it on every further mention, resetting the counter once that skill exists. See "Domain recurrence" below.
 - `pending.py` — CLI for the async approval queue (`new`/`list`/`show`/`approve`/`reject`). Uses async `auto_stage`-style staging: proposals land in `.state/pending/<id>/` and survive restarts until approved or rejected.
-- `list_pending.py` — SessionStart hook. Prints any pending proposals so they aren't forgotten between sessions.
+- `list_pending.py` — SessionStart hook. Prints any pending proposals so they aren't forgotten between sessions. Flags entries whose staged content still contains the auto-generated skeleton `TODO` marker (`[SKELETON]`), with an insistent reminder to fill in real content — fires every session start regardless of whether the domain is mentioned again.
 
 ### Trigger (multi-signal, mirrors self-improving-skills)
 
