@@ -41,11 +41,19 @@ def get_integration_dir():
     return candidate if os.path.isdir(candidate) else None
 
 
-def get_known_domains(config):
-    """Return {search_term: skill_dir_name} from Integration dir + config list.
+def split_camel_case(name):
+    """Split a CamelCase name into lowercase words (AzulCargo -> ['azul', 'cargo'])."""
+    words = re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+", name)
+    return [w.lower() for w in words if w]
 
-    Integration dir: subdir names are lowercased and version suffixes stripped
-    (e.g. BlingV3 -> bling, Correios -> correios).
+
+def get_known_domains(config):
+    """Return {search_pattern: skill_dir_name} from Integration dir + config list.
+
+    Integration dir: subdir names have version suffixes stripped (e.g. BlingV3 ->
+    bling, Correios -> correios), then are split on CamelCase word boundaries so
+    the regex matches the name whether written solid, spaced, or hyphenated
+    (AzulCargo -> matches "azulcargo", "azul cargo", "azul-cargo").
 
     Config known_domains accepts a list of strings or {term: skill_name} dicts
     for domains not discoverable from the Integration dir.
@@ -56,16 +64,18 @@ def get_known_domains(config):
     if integration_dir:
         for entry in os.listdir(integration_dir):
             if os.path.isdir(os.path.join(integration_dir, entry)):
-                name = re.sub(r"[Vv]\d+$", "", entry).lower()
-                if name:
-                    domains[name] = name
+                name = re.sub(r"[Vv]\d+$", "", entry)
+                words = split_camel_case(name)
+                if words:
+                    pattern = r"[\s-]*".join(re.escape(w) for w in words)
+                    domains[pattern] = "".join(words)
 
     for item in config.get("known_domains", []):
         if isinstance(item, str):
-            domains[item.lower()] = item.lower()
+            domains[re.escape(item.lower())] = item.lower()
         elif isinstance(item, dict):
             for term, skill_name in item.items():
-                domains[str(term).lower()] = str(skill_name).lower()
+                domains[re.escape(str(term).lower())] = str(skill_name).lower()
 
     return domains
 
@@ -107,8 +117,8 @@ def detect_domains(prompt_text, known_domains):
     """Return set of skill_dir_names referenced in prompt_text."""
     found = set()
     prompt_lower = prompt_text.lower()
-    for term, skill_name in known_domains.items():
-        if re.search(r"(?<![a-z])" + re.escape(term) + r"(?![a-z])", prompt_lower):
+    for pattern, skill_name in known_domains.items():
+        if re.search(r"(?<![a-z])" + pattern + r"(?![a-z])", prompt_lower):
             found.add(skill_name)
     return found
 
