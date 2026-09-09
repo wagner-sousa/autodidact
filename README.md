@@ -3,9 +3,8 @@
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 [![agentskills.io](https://img.shields.io/badge/agentskills.io-compatible-FF6B35?style=for-the-badge&logo=bookstack&logoColor=white)](https://agentskills.io)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)
 
-> A procedural-memory self-improvement loop for any [agentskills.io](https://agentskills.io)-compatible AI coding agent, modeled on a `skill_manage`-style tool and its `write_approval` gate.
+> A procedural-memory self-improvement loop for any [agentskills.io](https://agentskills.io)-compatible AI coding agent, modeled on a `skill_manage`-style tool and its `auto_stage` gate.
 
 ---
 
@@ -41,9 +40,9 @@ Six proposal actions, mirroring that `skill_manage` shape: `create`, `patch`, `e
   agent-agnostic by design: it targets any agent (Claude Code, OpenCode, or otherwise)
   that supports this open skill spec plus Stop/UserPromptSubmit/SessionStart-equivalent
   hooks.
-- **Python 3** — hook logic and the pending-queue CLI (`pending.py`,
-  `detect_complexity.py`), stdlib only, no dependencies.
-- **Bash** — hook wiring scripts (`inject_reminder.sh`, `list_pending.sh`).
+- **Python 3** — all scripts and hooks (`pending.py`, `inject_reminder.py`,
+  `detect_domain_recurrence.py`, `detect_complexity.py`, `list_pending.py`,
+  `install_hooks.py`), stdlib only, no external dependencies.
 
 ---
 
@@ -52,7 +51,7 @@ Six proposal actions, mirroring that `skill_manage` shape: `create`, `patch`, `e
 - Any [agentskills.io](https://agentskills.io)-compatible AI coding agent with
   Stop/UserPromptSubmit/SessionStart-equivalent hooks (e.g. Claude Code, OpenCode).
 - Python 3, available on `PATH` as `python3`.
-- Bash, for the two shell hooks.
+
 - Optionally, a `skill-creator` skill installed in your project — see
   [Pairing with a skill-creator](#pairing-with-a-skill-creator) below. autodidact
   works without one; it just skips the guard step.
@@ -114,7 +113,7 @@ including non-Claude-Code agents.
 
 ```json
 {
-  "write_approval": true,
+  "auto_stage": true,
   "scope": "project",
   "trigger": {
     "min_tool_calls": 5,
@@ -126,7 +125,7 @@ including non-Claude-Code agents.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `write_approval` | `true` | `true` = stage proposals in the async queue. `false` = apply immediately, no queue — trusted/single-user setups only. |
+| `auto_stage` | `true` | `true` = stage proposals in the async queue. `false` = apply immediately, no queue — trusted/single-user setups only. |
 | `scope` | `"project"` | `"project"` = write to `.claude/skills/` (versioned, this repo only). `"user"` = write to `~/.claude/skills/` (survives clone/reset, shared across projects). |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn to fire. |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy. |
@@ -145,12 +144,12 @@ autodidact/
 │   └── autodidact/
 │       ├── SKILL.md               # the loop: when it fires, how to propose/approve
 │       ├── SKILL_CREATOR.md       # how to pair autodidact with a skill-creator
-│       ├── config.json            # write_approval / scope / trigger thresholds
+│       ├── config.json            # auto_stage / scope / trigger thresholds
 │       └── scripts/
 │           ├── detect_complexity.py  # Stop hook
-│           ├── inject_reminder.sh    # UserPromptSubmit hook
+│           ├── inject_reminder.py    # UserPromptSubmit hook
 │           ├── pending.py            # approval queue CLI
-│           ├── list_pending.sh       # SessionStart hook
+│           ├── list_pending.py       # SessionStart hook
 │           └── README.md             # hook wiring instructions
 ├── commands/
 │   ├── skill-learn.md             # /skill-learn
@@ -217,8 +216,8 @@ graph TB
     Judge -- yes --> Guard[Skill guard: review via skill-creator]
     Guard --> Stage[pending.py new: stage proposal]
     Stage --> Queue[(.state/pending/id)]
-    Queue -- write_approval=false --> Apply[Apply immediately]
-    Queue -- write_approval=true --> Review{User approves?}
+    Queue -- auto_stage=false --> Apply[Apply immediately]
+    Queue -- auto_stage=true --> Review{User approves?}
     Review -- approve <id> --> Apply
     Review -- reject <id> --> Discard[Discard, no trace]
     Apply --> Skills[(.claude/skills/)]

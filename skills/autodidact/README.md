@@ -3,10 +3,10 @@
 These scripts implement autodidact's side of the loop: any [agentskills.io](https://agentskills.io)-compatible agent that exposes Stop/UserPromptSubmit/SessionStart-equivalent hooks can drive them. Five scripts, tool-agnostic in logic:
 
 - `detect_complexity.py` — Stop hook. Reads the hook JSON payload from stdin, needs `transcript_path` (path to the JSONL conversation transcript). Counts `tool_use` blocks in the last turn; if >= threshold, writes `.state/pending.json`. This is a cheap backstop only — the real trigger is the agent's own end-of-task judgment (see `SKILL.md`).
-- `inject_reminder.sh` — UserPromptSubmit hook. If `.state/pending.json` exists, prints the skill_manage trigger text (consumed as injected context) and deletes the marker.
-- `detect_domain_recurrence.py` — UserPromptSubmit hook. Reads the hook JSON payload from stdin, needs `prompt` (the user's message text). Catches the case `detect_complexity.py` can't: several small, individually-cheap turns asking about the same uncovered domain in a row, none of which alone crosses the tool-call threshold. Matches known domain terms against the prompt text and tracks per-domain mention counts in `.state/domain_mentions.json`; once a domain hits `min_mentions` without a `.claude/skills/<name>/` directory, fires a reminder on every further mention of it (not judgment-gated, unlike the other triggers), and resets the counter once that skill exists. See "Domain recurrence" below.
-- `pending.py` — CLI for the async approval queue (`new`/`list`/`show`/`approve`/`reject`). Uses async `write_approval`-style staging: proposals land in `.state/pending/<id>/` and survive restarts until approved or rejected.
-- `list_pending.sh` — SessionStart hook. Prints any pending proposals so they aren't forgotten between sessions.
+- `inject_reminder.py` — UserPromptSubmit hook. If `.state/pending.json` exists, prints the skill_manage trigger text (consumed as injected context) and deletes the marker.
+- `detect_domain_recurrence.py` — UserPromptSubmit hook. Reads the hook JSON payload from stdin, needs `prompt` (the user's message text). Catches the case `detect_complexity.py` can't: several small, individually-cheap turns asking about the same uncovered domain in a row, none of which alone crosses the tool-call threshold. Matches known domain terms against the prompt text and tracks per-domain mention counts in `.state/domain_mentions.json`; once a domain hits `min_mentions` without a `.claude/skills/<name>/` directory, self-stages a skeleton `create` proposal via `pending.py` (deduplicated per domain) and fires a reminder pointing at it on every further mention, resetting the counter once that skill exists. See "Domain recurrence" below.
+- `pending.py` — CLI for the async approval queue (`new`/`list`/`show`/`approve`/`reject`). Uses async `auto_stage`-style staging: proposals land in `.state/pending/<id>/` and survive restarts until approved or rejected.
+- `list_pending.py` — SessionStart hook. Prints any pending proposals so they aren't forgotten between sessions.
 
 ### Trigger (multi-signal, mirrors self-improving-skills)
 
@@ -22,11 +22,13 @@ Two independent paths in `detect_complexity.py`'s `should_fire()`: an edit-heavy
 
 Precedence: `SKILL_MANAGE_THRESHOLD` env var > `config.json["trigger"]` > defaults above.
 
-### write_approval
+### auto_stage
 
-`config.json` `"write_approval"` (default `true`) mirrors that kind of flag:
+`config.json` `"auto_stage"` (root key, default `true`):
 - `true` — `pending.py new` only stages the proposal; nothing touches `.claude/skills/` until `approve <id>`.
-- `false` — `pending.py new` applies immediately (skip the queue), same effect as running with the gate disabled. Use only in trusted/throwaway setups.
+- `false` — `pending.py new` applies immediately (skip the queue). Use only in trusted/throwaway setups.
+
+This single flag replaced the old `write_approval` (root) and the old `domain_recurrence.auto_stage` — both controlled essentially the same thing (queue vs. apply-immediately), so they were merged into one root key.
 
 ### scope
 
@@ -40,11 +42,12 @@ Override per-proposal with `pending.py new --scope project|user` (does not touch
 
 `config.json`'s `"domain_recurrence"` object (tracked in git, project-wide default):
 ```json
-{"domain_recurrence": {"min_mentions": 3, "auto_stage": true, "known_domains": []}}
+{"domain_recurrence": {"min_mentions": 3, "known_domains": []}}
 ```
 - `min_mentions` — how many times a domain can be mentioned (without an owning skill) before it fires. From that point on it fires on every subsequent mention until the skill directory exists (insistent by design).
-- `auto_stage` — `true` (default): the hook itself calls `pending.py new --action create` and stages a skeleton `SKILL.md` (frontmatter + `TODO` placeholders) for the domain, so a queue entry exists without depending on the agent noticing the reminder. Deduplicated — an existing pending entry for that `target_skill` is reused instead of restaging on every mention; each print points at that entry's id. `write_approval` still gates whether the skeleton is queued (`true`) or written straight to `.claude/skills/<domain>/` (`false`) — either way, someone (the agent, ideally, before the user approves) has to replace the placeholder with real content. `false` reverts to the old behavior: print-only reminder, agent must call `pending.py new` itself.
 - `known_domains` — extra terms to watch beyond what's auto-discovered. Accepts plain strings (`"mercadopago"`) or `{term: skill_dir_name}` maps when the spoken term differs from the skill's directory name (`{"nota fiscal": "fiscal"}`).
+
+Once fired, the hook always self-stages: it calls `pending.py new --action create` itself and writes a skeleton `SKILL.md` (frontmatter + `TODO` placeholders) for the domain, so a queue entry exists without depending on the agent noticing the reminder. Deduplicated — an existing pending entry for that `target_skill` is reused instead of restaging on every mention; each print points at that entry's id. The root `auto_stage` (see above) still gates whether that skeleton is queued (`true`) or written straight to `.claude/skills/<domain>/` (`false`) — either way, someone (the agent, ideally, before the user approves) has to replace the placeholder with real content.
 
 Auto-discovery: `detect_domain_recurrence.py` looks for `src/Uoou/Component/Integration/` relative to the project root (Sylius/Symfony layout) and treats each subdirectory as a domain, stripping a trailing version suffix (`BlingV3` -> `bling`). Projects without that layout should rely on `known_domains` instead — the auto-discovery step is a no-op if the directory isn't found.
 
@@ -64,13 +67,13 @@ Add to `.claude/settings.json`:
     ],
     "UserPromptSubmit": [
       { "hooks": [
-        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" },
+        { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/inject_reminder.py" },
         { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/detect_domain_recurrence.py" }
       ]}
     ],
     "SessionStart": [
       { "hooks": [
-        { "type": "command", "command": "bash .claude/skills/autodidact/scripts/list_pending.sh" }
+        { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/list_pending.py" }
       ]}
     ]
   }
@@ -85,7 +88,7 @@ Same two scripts work unmodified as long as the host:
 1. Exposes a Stop-equivalent event with the transcript path (JSONL, Anthropic message format) piped as JSON on stdin.
 2. Exposes a prompt-submit-equivalent event whose stdout gets injected as context for the next turn.
 
-If the host's transcript format differs, only `last_turn_tool_calls()` in `detect_complexity.py` needs adapting — the marker file contract (`.state/pending.json` with `tool_call_count` and `tools_used`) stays the same, so `inject_reminder.sh` never needs to change.
+If the host's transcript format differs, only `last_turn_tool_calls()` in `detect_complexity.py` needs adapting — the marker file contract (`.state/pending.json` with `tool_call_count` and `tools_used`) stays the same, so `inject_reminder.py` never needs to change.
 
 ## Installing in a project
 

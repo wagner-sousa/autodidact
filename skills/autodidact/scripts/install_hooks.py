@@ -30,11 +30,11 @@ def _required_hooks(user_level):
             f"python3 {skill_dir}/detect_complexity.py",
         ],
         "UserPromptSubmit": [
-            f"bash {skill_dir}/inject_reminder.sh",
+            f"python3 {skill_dir}/inject_reminder.py",
             f"python3 {skill_dir}/detect_domain_recurrence.py",
         ],
         "SessionStart": [
-            f"bash {skill_dir}/list_pending.sh",
+            f"python3 {skill_dir}/list_pending.py",
         ],
     }
 
@@ -63,7 +63,7 @@ def _script_names_in_event(event_cfg):
                 parts = hook["command"].split()
                 for part in parts:
                     clean = part.strip("'\"")
-                    if clean.endswith(".py") or clean.endswith(".sh"):
+                    if clean.endswith(".py"):
                         names.add(os.path.basename(clean))
     return names
 

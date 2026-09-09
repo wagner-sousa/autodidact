@@ -32,7 +32,6 @@ PENDING_PY = os.path.join(SCRIPT_DIR, "pending.py")
 DEFAULT_CONFIG = {
     "min_mentions": 3,
     "known_domains": [],
-    "auto_stage": True,
 }
 
 SKELETON_TEMPLATE = """---
@@ -208,7 +207,6 @@ def main():
 
     config = get_config()
     min_mentions = int(config.get("min_mentions", DEFAULT_CONFIG["min_mentions"]))
-    do_auto_stage = bool(config.get("auto_stage", DEFAULT_CONFIG["auto_stage"]))
     known_domains = get_known_domains(config)
 
     if not known_domains:
@@ -235,16 +233,6 @@ def main():
     save_mentions(mentions)
 
     for domain, count in to_remind:
-        if not do_auto_stage:
-            print(
-                "autodidact: '{}' mentioned {} time(s) with no .claude/skills/{}/ — "
-                "this is not optional, stage a create/patch proposal via pending.py "
-                "before ending this turn (write_approval still gates the actual write).".format(
-                    domain, count, domain
-                )
-            )
-            continue
-
         staged, entry_id = already_staged(domain)
         if not staged:
             entry_id = auto_stage(domain, count)
@@ -254,8 +242,9 @@ def main():
             print(
                 "autodidact: '{}' mentioned {} time(s) with no skill — auto-staged "
                 "proposal {} (skeleton, needs real content). Replace the placeholder "
-                "before approving: pending.py show {}; write_approval still gates the "
-                "actual write.".format(domain, count, entry_id, entry_id)
+                "before approving: pending.py show {}; config.json's root "
+                "\"auto_stage\" still gates whether this queues for approval or "
+                "applies immediately.".format(domain, count, entry_id, entry_id)
             )
         else:
             print(

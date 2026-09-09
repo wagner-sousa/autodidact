@@ -1,14 +1,13 @@
 {
-  "write_approval": true,
+  "auto_stage": true,
   "scope": "project",
   "trigger": {
     "min_tool_calls": 5,
     "min_file_edits": 2,
-    "readonly_threshold": 12
+    "readonly_threshold": 8
   },
   "domain_recurrence": {
     "min_mentions": 3,
-    "auto_stage": true,
     "known_domains": []
   }
 }

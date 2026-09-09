@@ -6,15 +6,15 @@ description: "Procedural memory self-improvement loop (skill_manage-style). Self
 # Autodidact — Procedural Memory Loop
 
 This skill activates after complex turns to evaluate whether the work just done should be persisted as a new skill or a patch to an existing one.
-It is an async approval-queue pattern (`skill_manage` + `write_approval`) — agent-agnostic by design, tested primarily on Claude Code but portable to any agent that supports the SKILL.md spec plus equivalent hooks.
+It is an async approval-queue pattern (`skill_manage` + `auto_stage`) — agent-agnostic by design, tested primarily on Claude Code but portable to any agent that supports the SKILL.md spec plus equivalent hooks.
 
 ## When this skill fires
 
-Three paths, and all are valid — this mirrors that pattern: the trigger is the agent's own judgment, not a fixed rule. `write_approval: true` gates the write, not the decision to propose.
+Three paths, and all are valid — this mirrors that pattern: the trigger is the agent's own judgment, not a fixed rule. `auto_stage: true` gates the write, not the decision to propose.
 
 1. **Your own judgment (primary).** At the natural end of any task, ask yourself the questions below regardless of whether a hook fired. A workflow can be worth capturing after 2 tool calls (a genuinely tricky one-liner) or not worth it after 15 (repetitive, uninteresting). Don't wait for permission to evaluate.
 2. **The Stop hook nudge (backstop, cheap and dumb on purpose).** `scripts/detect_complexity.py` counts `tool_use` blocks in the transcript and injects a reminder past a threshold. It exists only to catch cases where you finished a complex turn and moved on without pausing to reflect — it is not a substitute for judgment, and a turn crossing the threshold does not mean you must propose something.
-3. **The domain-recurrence nudge (self-staging, unlike the other two).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. Once it fires, it doesn't just print a reminder for the agent to act on: it stages a `create` proposal itself (a skeleton `SKILL.md` with `TODO` placeholders), so the entry lands in the pending queue without depending on the agent noticing. `write_approval: true` still gates the actual write — staging a skeleton costs nothing but a queue entry. Your job at that point is to replace the skeleton's placeholder content with the real workflow/knowledge before the user approves it (`pending.py show <id>` to see the staged file, overwrite it under `.state/pending/<id>/files/`, or `reject` and draft it properly later). It fires on every subsequent mention (not just the first) until the proposal exists or the skill directory does. Set `domain_recurrence.auto_stage: false` in `config.json` to fall back to reminder-only (agent must call `pending.py new` itself). See [README.md](README.md) for configuration.
+3. **The domain-recurrence nudge (self-staging, unlike the other two).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. Once it fires, it doesn't just print a reminder for the agent to act on: it stages a `create` proposal itself (a skeleton `SKILL.md` with `TODO` placeholders), so the entry lands in the pending queue without depending on the agent noticing. `auto_stage: true` still gates the actual write — staging a skeleton costs nothing but a queue entry. Your job at that point is to replace the skeleton's placeholder content with the real workflow/knowledge before the user approves it (`pending.py show <id>` to see the staged file, overwrite it under `.state/pending/<id>/files/`, or `reject` and draft it properly later). It fires on every subsequent mention (not just the first) until the proposal exists or the skill directory does. Set `auto_stage: false` in `config.json` to apply proposals immediately without queuing. See [README.md](README.md) for configuration.
 
 ## Evaluation checklist
 
@@ -64,7 +64,7 @@ Skip the guard only for `delete`/`remove_file` (nothing to validate) and for tri
 
 ## Proposal format
 
-Stage a pending entry instead of writing directly and instead of blocking the turn on a yes/no — this is the async approval queue pattern (`write_approval`), not a synchronous prompt. Write the proposed content to a temp file, then stage it:
+Stage a pending entry instead of writing directly and instead of blocking the turn on a yes/no — this is the async approval queue pattern (`auto_stage`), not a synchronous prompt. Write the proposed content to a temp file, then stage it:
 
 ```bash
 python3 .claude/skills/autodidact/scripts/pending.py new \
@@ -73,7 +73,7 @@ python3 .claude/skills/autodidact/scripts/pending.py new \
   --file "references/new-doc.md=/tmp/staged-content.md"
 ```
 
-`pending.py new` behaves according to `config.json`'s `write_approval`:
+`pending.py new` behaves according to `config.json`'s `auto_stage`:
 - `true` (queue, default) — prints the entry id. Tell the user, in one line, that a proposal was staged and how to act on it — don't wait for a reply before moving on:
   ```
   autodidact: staged <action> for <skill-name> (id <id>) — "python3 .claude/skills/autodidact/scripts/pending.py show <id>" to review, "approve <id>" / "reject <id>" to decide, whenever convenient.
@@ -108,7 +108,7 @@ To install in a project (Claude Code, OpenCode, or any agent that supports agent
 
 | Key | Default | Effect |
 |---|---|---|
-| `write_approval` | `true` | `true` = stage proposals in the async queue (default). `false` = apply immediately, no queue. |
+| `auto_stage` | `true` | `true` = stage proposals in the async queue, wait for approval. `false` = apply immediately, no queue. |
 | `scope` | `"project"` | Where skills are written: `"project"` = `.claude/skills/` (versioned, this repo only). `"user"` = `~/.claude/skills/` (survives git clone/reset, shared across projects). Override per-proposal with `pending.py new --scope project\|user`. |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn (see `trigger.min_file_edits`) to fire. Override with `SKILL_MANAGE_THRESHOLD` env var (overrides this key only). |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy and use the lower `min_tool_calls` bar. |
