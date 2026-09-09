@@ -53,7 +53,8 @@ def get_known_domains(config):
     Integration dir: subdir names have version suffixes stripped (e.g. BlingV3 ->
     bling, Correios -> correios), then are split on CamelCase word boundaries so
     the regex matches the name whether written solid, spaced, or hyphenated
-    (AzulCargo -> matches "azulcargo", "azul cargo", "azul-cargo").
+    (AzulCargo -> matches "azulcargo", "azul cargo", "azul-cargo"). The resulting
+    skill_dir_name is kebab-case (AzulCargo -> azul-cargo).
 
     Config known_domains accepts a list of strings or {term: skill_name} dicts
     for domains not discoverable from the Integration dir.
@@ -68,7 +69,7 @@ def get_known_domains(config):
                 words = split_camel_case(name)
                 if words:
                     pattern = r"[\s-]*".join(re.escape(w) for w in words)
-                    domains[pattern] = "".join(words)
+                    domains[pattern] = "-".join(words)
 
     for item in config.get("known_domains", []):
         if isinstance(item, str):
