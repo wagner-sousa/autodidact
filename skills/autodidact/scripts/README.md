@@ -76,7 +76,7 @@ Add to `.claude/settings.json`:
 }
 ```
 
-Merge these entries into existing `Stop`/`UserPromptSubmit`/`SessionStart` arrays instead of replacing them if the project already has hooks there.
+Merge these entries into existing `Stop`/`UserPromptSubmit`/`SessionStart` arrays instead of replacing them if the project already has hooks there — or run `install_hooks.py` (below) to do this merge automatically.
 
 ## OpenCode / other agents
 
@@ -91,5 +91,25 @@ If the host's transcript format differs, only `last_turn_tool_calls()` in `detec
 ```bash
 cp -r skills/autodidact <target-project>/.claude/skills/
 ```
+
+Then wire the hooks automatically with the install script (idempotent — safe to re-run):
+
+```bash
+# Install into project-level settings (.claude/settings.json)
+python .claude/skills/autodidact/scripts/install_hooks.py
+
+# Or install into user-level settings (~/.claude/settings.json)
+python .claude/skills/autodidact/scripts/install_hooks.py --user
+
+# Check status without writing
+python .claude/skills/autodidact/scripts/install_hooks.py --check
+```
+
+The script detects existing hooks by script filename (basename match), so it handles
+both relative and absolute command paths without duplicating entries. `--user` points
+the generated hook commands at `~/.claude/skills/autodidact/scripts/...` (absolute
+path, since hooks always run with the project directory as cwd) — pair it with
+`scope: "user"` in `config.json` when skills are meant to be written to
+`~/.claude/skills/` too.
 
 The path `.claude/skills/` above is Claude Code's layout. For other agents, copy to wherever their skills directory lives and adjust the hook command paths accordingly.

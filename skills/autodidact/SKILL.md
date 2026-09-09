@@ -97,10 +97,10 @@ Never write to `.claude/skills/` outside this queue. The pending queue survives 
 
 ## Portability
 
-This skill and its scripts form a self-contained plugin: `detect_complexity.py` (Stop backstop), `inject_reminder.sh` (UserPromptSubmit nudge), `pending.py` (async approval queue), `list_pending.sh` (SessionStart visibility).
+This skill and its scripts form a self-contained plugin: `detect_complexity.py` (Stop backstop), `inject_reminder.sh` (UserPromptSubmit nudge), `detect_domain_recurrence.py` (UserPromptSubmit domain-recurrence backstop), `pending.py` (async approval queue), `list_pending.sh` (SessionStart visibility), `install_hooks.py` (hook installer).
 To install in a project (Claude Code, OpenCode, or any agent that supports agentskills.io + shell hooks):
-1. Copy this directory to `.claude/skills/autodidact/` (or equivalent skills path).
-2. Add the three hook entries from `scripts/README.md` to the project's hook config.
+1. Copy this directory to `.claude/skills/autodidact/` (or equivalent skills path — see `scope` in Configuration below for `.claude/skills/` vs `~/.claude/skills/`).
+2. Run `python .claude/skills/autodidact/scripts/install_hooks.py` (add `--user` to wire `~/.claude/settings.json` instead of the project's) — it is idempotent, safe to re-run, and validates existing hooks before writing. Use `--check` to only report status. On agents other than Claude Code, add the hook entries from `scripts/README.md` to the project's hook config manually instead.
 
 ## Configuration
 

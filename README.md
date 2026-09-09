@@ -80,14 +80,27 @@ cp commands/*.md <your-project>/.claude/commands/
 
 ### Wire the hooks
 
-`hooks/hooks.json` contains the ready-to-use Stop/UserPromptSubmit/SessionStart
-block. Merge it into your agent's hook config (`.claude/settings.json` for Claude
-Code; check `skills/autodidact/scripts/README.md` for other agents):
+The fastest way is the install script — it is idempotent, detects existing hooks by
+script filename, and handles both relative and absolute command paths:
+
+```bash
+# Project-level (.claude/settings.json)
+python .claude/skills/autodidact/scripts/install_hooks.py
+
+# User-level (~/.claude/settings.json) — hooks use absolute paths so they work
+# in any project
+python .claude/skills/autodidact/scripts/install_hooks.py --user
+
+# Dry-run: check status without writing
+python .claude/skills/autodidact/scripts/install_hooks.py --check
+```
+
+Alternatively, `hooks/hooks.json` contains the ready-to-use
+Stop/UserPromptSubmit/SessionStart block you can merge manually:
 
 ```bash
 cp hooks/hooks.json <your-project>/.claude/hooks.json
-# then merge the "hooks" key into .claude/settings.json — or point your agent
-# at .claude/hooks.json directly if its settings format supports it.
+# then merge the "hooks" key into .claude/settings.json
 ```
 
 See `skills/autodidact/scripts/README.md` for the full explanation of each hook,
