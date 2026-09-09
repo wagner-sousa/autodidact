@@ -8,8 +8,9 @@ tracks per-domain mention counts in .state/domain_mentions.json.
 When a domain accumulates >= min_mentions without a corresponding skill directory,
 emits a reminder nudging autodidact evaluation for that domain.
 
-Fires at every multiple of min_mentions (at 3, 6, 9...) until the skill is created.
-When a skill is detected, resets the counter for that domain.
+Fires on every mention once the domain has reached min_mentions (insistent, not
+just at multiples) until the skill is created. When a skill is detected, resets
+the counter for that domain.
 """
 import json
 import os
@@ -156,7 +157,7 @@ def main():
         count = mentions.get(domain, 0) + 1
         mentions[domain] = count
 
-        if count % min_mentions == 0:
+        if count >= min_mentions:
             to_remind.append((domain, count))
 
     save_mentions(mentions)
@@ -164,7 +165,8 @@ def main():
     for domain, count in to_remind:
         print(
             "autodidact: '{}' mentioned {} time(s) with no .claude/skills/{}/ — "
-            "consider creating a skill (apply autodidact when this task ends).".format(
+            "this is not optional, stage a create/patch proposal via pending.py "
+            "before ending this turn (write_approval still gates the actual write).".format(
                 domain, count, domain
             )
         )
