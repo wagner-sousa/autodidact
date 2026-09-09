@@ -40,9 +40,10 @@ Override per-proposal with `pending.py new --scope project|user` (does not touch
 
 `config.json`'s `"domain_recurrence"` object (tracked in git, project-wide default):
 ```json
-{"domain_recurrence": {"min_mentions": 3, "known_domains": []}}
+{"domain_recurrence": {"min_mentions": 3, "auto_stage": true, "known_domains": []}}
 ```
-- `min_mentions` — how many times a domain can be mentioned (without an owning skill) before a reminder fires. From that point on it fires on every subsequent mention until a proposal is staged or the skill directory exists (insistent by design).
+- `min_mentions` — how many times a domain can be mentioned (without an owning skill) before it fires. From that point on it fires on every subsequent mention until the skill directory exists (insistent by design).
+- `auto_stage` — `true` (default): the hook itself calls `pending.py new --action create` and stages a skeleton `SKILL.md` (frontmatter + `TODO` placeholders) for the domain, so a queue entry exists without depending on the agent noticing the reminder. Deduplicated — an existing pending entry for that `target_skill` is reused instead of restaging on every mention; each print points at that entry's id. `write_approval` still gates whether the skeleton is queued (`true`) or written straight to `.claude/skills/<domain>/` (`false`) — either way, someone (the agent, ideally, before the user approves) has to replace the placeholder with real content. `false` reverts to the old behavior: print-only reminder, agent must call `pending.py new` itself.
 - `known_domains` — extra terms to watch beyond what's auto-discovered. Accepts plain strings (`"mercadopago"`) or `{term: skill_dir_name}` maps when the spoken term differs from the skill's directory name (`{"nota fiscal": "fiscal"}`).
 
 Auto-discovery: `detect_domain_recurrence.py` looks for `src/Uoou/Component/Integration/` relative to the project root (Sylius/Symfony layout) and treats each subdirectory as a domain, stripping a trailing version suffix (`BlingV3` -> `bling`). Projects without that layout should rely on `known_domains` instead — the auto-discovery step is a no-op if the directory isn't found.

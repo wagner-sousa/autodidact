@@ -8,6 +8,7 @@
   },
   "domain_recurrence": {
     "min_mentions": 3,
+    "auto_stage": true,
     "known_domains": []
   }
 }
