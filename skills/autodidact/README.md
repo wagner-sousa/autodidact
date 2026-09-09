@@ -4,7 +4,7 @@ These scripts implement autodidact's side of the loop: any [agentskills.io](http
 
 - `detect_complexity.py` — Stop hook. Reads the hook JSON payload from stdin, needs `transcript_path` (path to the JSONL conversation transcript). Counts `tool_use` blocks in the last turn; if >= threshold, writes `.state/pending.json`. This is a cheap backstop only — the real trigger is the agent's own end-of-task judgment (see `SKILL.md`).
 - `inject_reminder.sh` — UserPromptSubmit hook. If `.state/pending.json` exists, prints the skill_manage trigger text (consumed as injected context) and deletes the marker.
-- `detect_domain_recurrence.py` — UserPromptSubmit hook. Reads the hook JSON payload from stdin, needs `prompt` (the user's message text). Catches the case `detect_complexity.py` can't: several small, individually-cheap turns asking about the same uncovered domain in a row, none of which alone crosses the tool-call threshold. Matches known domain terms against the prompt text and tracks per-domain mention counts in `.state/domain_mentions.json`; fires a reminder at every multiple of `min_mentions` for a domain still lacking a `.claude/skills/<name>/` directory, and resets the counter once that skill exists. See "Domain recurrence" below.
+- `detect_domain_recurrence.py` — UserPromptSubmit hook. Reads the hook JSON payload from stdin, needs `prompt` (the user's message text). Catches the case `detect_complexity.py` can't: several small, individually-cheap turns asking about the same uncovered domain in a row, none of which alone crosses the tool-call threshold. Matches known domain terms against the prompt text and tracks per-domain mention counts in `.state/domain_mentions.json`; once a domain hits `min_mentions` without a `.claude/skills/<name>/` directory, fires a reminder on every further mention of it (not judgment-gated, unlike the other triggers), and resets the counter once that skill exists. See "Domain recurrence" below.
 - `pending.py` — CLI for the async approval queue (`new`/`list`/`show`/`approve`/`reject`). Mirrors Hermes' `write_approval` staging: proposals land in `.state/pending/<id>/` and survive restarts until approved or rejected.
 - `list_pending.sh` — SessionStart hook. Prints any pending proposals so they aren't forgotten between sessions.
 
@@ -42,7 +42,7 @@ Override per-proposal with `pending.py new --scope project|user` (does not touch
 ```json
 {"domain_recurrence": {"min_mentions": 3, "known_domains": []}}
 ```
-- `min_mentions` — how many times a domain can be mentioned (without an owning skill) before a reminder fires. Fires again every `min_mentions` after that (3, 6, 9...) so it doesn't nag every turn.
+- `min_mentions` — how many times a domain can be mentioned (without an owning skill) before a reminder fires. From that point on it fires on every subsequent mention until a proposal is staged or the skill directory exists (insistent by design).
 - `known_domains` — extra terms to watch beyond what's auto-discovered. Accepts plain strings (`"mercadopago"`) or `{term: skill_dir_name}` maps when the spoken term differs from the skill's directory name (`{"nota fiscal": "fiscal"}`).
 
 Auto-discovery: `detect_domain_recurrence.py` looks for `src/Uoou/Component/Integration/` relative to the project root (Sylius/Symfony layout) and treats each subdirectory as a domain, stripping a trailing version suffix (`BlingV3` -> `bling`). Projects without that layout should rely on `known_domains` instead — the auto-discovery step is a no-op if the directory isn't found.
@@ -76,7 +76,7 @@ Add to `.claude/settings.json`:
 }
 ```
 
-Merge these entries into existing `Stop`/`UserPromptSubmit`/`SessionStart` arrays instead of replacing them if the project already has hooks there — or run `install_hooks.py` (below) to do this merge automatically.
+Merge these entries into existing `Stop`/`UserPromptSubmit`/`SessionStart` arrays instead of replacing them if the project already has hooks there.
 
 ## OpenCode / other agents
 
@@ -106,10 +106,6 @@ python3 .claude/skills/autodidact/scripts/install_hooks.py --check
 ```
 
 The script detects existing hooks by script filename (basename match), so it handles
-both relative and absolute command paths without duplicating entries. `--user` points
-the generated hook commands at `~/.claude/skills/autodidact/scripts/...` (absolute
-path, since hooks always run with the project directory as cwd) — pair it with
-`scope: "user"` in `config.json` when skills are meant to be written to
-`~/.claude/skills/` too.
+both relative and absolute command paths without duplicating entries.
 
 The path `.claude/skills/` above is Claude Code's layout. For other agents, copy to wherever their skills directory lives and adjust the hook command paths accordingly.

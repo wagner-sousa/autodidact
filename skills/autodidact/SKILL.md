@@ -14,7 +14,7 @@ Three paths, and all are valid — this mirrors how Hermes actually works: the t
 
 1. **Your own judgment (primary).** At the natural end of any task, ask yourself the questions below regardless of whether a hook fired. A workflow can be worth capturing after 2 tool calls (a genuinely tricky one-liner) or not worth it after 15 (repetitive, uninteresting). Don't wait for permission to evaluate.
 2. **The Stop hook nudge (backstop, cheap and dumb on purpose).** `scripts/detect_complexity.py` counts `tool_use` blocks in the transcript and injects a reminder past a threshold. It exists only to catch cases where you finished a complex turn and moved on without pausing to reflect — it is not a substitute for judgment, and a turn crossing the threshold does not mean you must propose something.
-3. **The domain-recurrence nudge (mandatory, unlike the other two).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. Once it fires, it is not judgment-gated like the other two paths: stage a `create` or `patch` proposal before ending the turn. `write_approval: true` still gates the actual write, so staging costs nothing but a queue entry — there is no reason to skip it. It fires on every subsequent mention (not just the first) until a proposal is staged or the skill directory exists. See `scripts/README.md` for configuration.
+3. **The domain-recurrence nudge (mandatory, unlike the other two).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. Once it fires, it is not judgment-gated like the other two paths: stage a `create` or `patch` proposal before ending the turn. `write_approval: true` still gates the actual write, so staging costs nothing but a queue entry — there is no reason to skip it. It fires on every subsequent mention (not just the first) until a proposal is staged or the skill directory exists. See [README.md](README.md) for configuration.
 
 ## Evaluation checklist
 
@@ -100,7 +100,7 @@ Never write to `.claude/skills/` outside this queue. The pending queue survives 
 This skill and its scripts form a self-contained plugin: `detect_complexity.py` (Stop backstop), `inject_reminder.sh` (UserPromptSubmit nudge), `detect_domain_recurrence.py` (UserPromptSubmit domain-recurrence backstop), `pending.py` (async approval queue), `list_pending.sh` (SessionStart visibility), `install_hooks.py` (hook installer).
 To install in a project (Claude Code, OpenCode, or any agent that supports agentskills.io + shell hooks):
 1. Copy this directory to `.claude/skills/autodidact/` (or equivalent skills path — see `scope` in Configuration below for `.claude/skills/` vs `~/.claude/skills/`).
-2. Run `python3 .claude/skills/autodidact/scripts/install_hooks.py` (add `--user` to wire `~/.claude/settings.json` instead of the project's) — it is idempotent, safe to re-run, and validates existing hooks before writing. Use `--check` to only report status. On agents other than Claude Code, add the hook entries from `scripts/README.md` to the project's hook config manually instead.
+2. Run `python3 .claude/skills/autodidact/scripts/install_hooks.py` (add `--user` to wire `~/.claude/settings.json` instead of the project's) — it is idempotent, safe to re-run, and validates existing hooks before writing. Use `--check` to only report status. On agents other than Claude Code, add the hook entries from [README.md](README.md) to the project's hook config manually instead.
 
 ## Configuration
 
@@ -117,4 +117,4 @@ To install in a project (Claude Code, OpenCode, or any agent that supports agent
 ## Reference files
 
 - `SKILL_CREATOR.md` — how to fork or build a `skill-creator` skill to pair with this plugin's guard step.
-- `scripts/README.md` — hook wiring instructions (Claude Code, OpenCode, other adapters).
+- `README.md` — hook wiring instructions (Claude Code, OpenCode, other adapters).

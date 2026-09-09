@@ -103,7 +103,7 @@ cp hooks/hooks.json <your-project>/.claude/hooks.json
 # then merge the "hooks" key into .claude/settings.json
 ```
 
-See `skills/autodidact/scripts/README.md` for the full explanation of each hook,
+See `skills/autodidact/README.md` for the full explanation of each hook,
 including non-Claude-Code agents.
 
 ---
