@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""autodidact pending queue — async approval, Hermes-style.
+"""autodidact pending queue — async approval queue.
 
 Instead of asking for a yes/no in the same turn, a proposal is staged as a
 pending entry that survives restarts. The user reviews and approves/rejects

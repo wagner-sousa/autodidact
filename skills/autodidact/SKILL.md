@@ -1,16 +1,16 @@
 ---
 name: autodidact
-description: "Procedural memory self-improvement loop (Hermes-style skill_manage). Self-evaluates at the end of any task, complex or not, whether a workflow deserves to become or update a skill; the Stop-hook tool-count nudge is only a cheap backstop. Stages proposals to an async approval queue (create/patch/edit/delete/write_file/remove_file) instead of asking yes/no inline. Triggers: pending skill review, review a skill, pending learning, you discovered something, approve skill, what's pending, pending skills."
+description: "Procedural memory self-improvement loop (skill_manage-style). Self-evaluates at the end of any task, complex or not, whether a workflow deserves to become or update a skill; the Stop-hook tool-count nudge is only a cheap backstop. Stages proposals to an async approval queue (create/patch/edit/delete/write_file/remove_file) instead of asking yes/no inline. Triggers: pending skill review, review a skill, pending learning, you discovered something, approve skill, what's pending, pending skills."
 ---
 
 # Autodidact — Procedural Memory Loop
 
 This skill activates after complex turns to evaluate whether the work just done should be persisted as a new skill or a patch to an existing one.
-It is the [agentskills.io](https://agentskills.io) equivalent of Hermes Agent's `skill_manage` tool + `write_approval` gate — agent-agnostic by design, tested primarily on Claude Code but portable to any agent that supports the SKILL.md spec plus equivalent hooks.
+It is an async approval-queue pattern (`skill_manage` + `write_approval`) — agent-agnostic by design, tested primarily on Claude Code but portable to any agent that supports the SKILL.md spec plus equivalent hooks.
 
 ## When this skill fires
 
-Three paths, and all are valid — this mirrors how Hermes actually works: the trigger is the agent's own judgment, not a fixed rule. `write_approval: true` gates the write, not the decision to propose.
+Three paths, and all are valid — this mirrors that pattern: the trigger is the agent's own judgment, not a fixed rule. `write_approval: true` gates the write, not the decision to propose.
 
 1. **Your own judgment (primary).** At the natural end of any task, ask yourself the questions below regardless of whether a hook fired. A workflow can be worth capturing after 2 tool calls (a genuinely tricky one-liner) or not worth it after 15 (repetitive, uninteresting). Don't wait for permission to evaluate.
 2. **The Stop hook nudge (backstop, cheap and dumb on purpose).** `scripts/detect_complexity.py` counts `tool_use` blocks in the transcript and injects a reminder past a threshold. It exists only to catch cases where you finished a complex turn and moved on without pausing to reflect — it is not a substitute for judgment, and a turn crossing the threshold does not mean you must propose something.
@@ -29,7 +29,7 @@ If two or more answers are "yes", propose. Otherwise, skip silently.
 
 ## Action vocabulary
 
-Same six actions Hermes' `skill_manage` tool exposes. Pick the narrowest one that fits — `patch` is preferred over `edit` for the same reason a diff beats a rewrite: cheaper to review, less drift.
+Same six actions a `skill_manage`-style tool exposes. Pick the narrowest one that fits — `patch` is preferred over `edit` for the same reason a diff beats a rewrite: cheaper to review, less drift.
 
 | Action | When | Filesystem equivalent |
 |---|---|---|
@@ -54,7 +54,7 @@ Read the current skill index before deciding: list `.claude/skills/` and skim th
 
 ## Skill guard
 
-Before staging any `create`, `patch`, or `edit` proposal, run the drafted `SKILL.md` content past a `skill-creator` skill for a structural review — this is our stand-in for Hermes' guard, which snapshots and reverts malformed skills. See [SKILL_CREATOR.md](SKILL_CREATOR.md) for how to get a `skill-creator` skill (fork Anthropic's or OpenAI's implementation) into your project. Because `skill-creator` is typically an interactive draft→test→review flow, not a headless validator, invoke it through a subagent instead of inline:
+Before staging any `create`, `patch`, or `edit` proposal, run the drafted `SKILL.md` content past a `skill-creator` skill for a structural review — this is our stand-in for that kind of guard, which snapshots and reverts malformed skills. See [SKILL_CREATOR.md](SKILL_CREATOR.md) for how to get a `skill-creator` skill (fork Anthropic's or OpenAI's implementation) into your project. Because `skill-creator` is typically an interactive draft→test→review flow, not a headless validator, invoke it through a subagent instead of inline:
 
 1. Write the drafted `SKILL.md` (and any reference files) to a temp path — same content you're about to stage.
 2. Launch a subagent (a fresh general-purpose one — Claude Code's `Agent` tool, or your agent's equivalent spawn mechanism) with a self-contained prompt: review the temp files against your `skill-creator`'s conventions (language, frontmatter shape, description quality/triggers, no orphaned references, scope/size sanity). Ask it to report pass/fail plus concrete fixes, not to rewrite the skill itself.
@@ -64,7 +64,7 @@ Skip the guard only for `delete`/`remove_file` (nothing to validate) and for tri
 
 ## Proposal format
 
-Stage a pending entry instead of writing directly and instead of blocking the turn on a yes/no — this is the async approval queue Hermes uses (`write_approval`), not a synchronous prompt. Write the proposed content to a temp file, then stage it:
+Stage a pending entry instead of writing directly and instead of blocking the turn on a yes/no — this is the async approval queue pattern (`write_approval`), not a synchronous prompt. Write the proposed content to a temp file, then stage it:
 
 ```bash
 python3 .claude/skills/autodidact/scripts/pending.py new \
@@ -108,7 +108,7 @@ To install in a project (Claude Code, OpenCode, or any agent that supports agent
 
 | Key | Default | Effect |
 |---|---|---|
-| `write_approval` | `true` | `true` = stage proposals in the async queue (Hermes default). `false` = apply immediately, no queue. |
+| `write_approval` | `true` | `true` = stage proposals in the async queue (default). `false` = apply immediately, no queue. |
 | `scope` | `"project"` | Where skills are written: `"project"` = `.claude/skills/` (versioned, this repo only). `"user"` = `~/.claude/skills/` (survives git clone/reset, shared across projects). Override per-proposal with `pending.py new --scope project\|user`. |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn (see `trigger.min_file_edits`) to fire. Override with `SKILL_MANAGE_THRESHOLD` env var (overrides this key only). |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy and use the lower `min_tool_calls` bar. |

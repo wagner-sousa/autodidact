@@ -5,7 +5,7 @@ These scripts implement autodidact's side of the loop: any [agentskills.io](http
 - `detect_complexity.py` — Stop hook. Reads the hook JSON payload from stdin, needs `transcript_path` (path to the JSONL conversation transcript). Counts `tool_use` blocks in the last turn; if >= threshold, writes `.state/pending.json`. This is a cheap backstop only — the real trigger is the agent's own end-of-task judgment (see `SKILL.md`).
 - `inject_reminder.sh` — UserPromptSubmit hook. If `.state/pending.json` exists, prints the skill_manage trigger text (consumed as injected context) and deletes the marker.
 - `detect_domain_recurrence.py` — UserPromptSubmit hook. Reads the hook JSON payload from stdin, needs `prompt` (the user's message text). Catches the case `detect_complexity.py` can't: several small, individually-cheap turns asking about the same uncovered domain in a row, none of which alone crosses the tool-call threshold. Matches known domain terms against the prompt text and tracks per-domain mention counts in `.state/domain_mentions.json`; once a domain hits `min_mentions` without a `.claude/skills/<name>/` directory, fires a reminder on every further mention of it (not judgment-gated, unlike the other triggers), and resets the counter once that skill exists. See "Domain recurrence" below.
-- `pending.py` — CLI for the async approval queue (`new`/`list`/`show`/`approve`/`reject`). Mirrors Hermes' `write_approval` staging: proposals land in `.state/pending/<id>/` and survive restarts until approved or rejected.
+- `pending.py` — CLI for the async approval queue (`new`/`list`/`show`/`approve`/`reject`). Uses async `write_approval`-style staging: proposals land in `.state/pending/<id>/` and survive restarts until approved or rejected.
 - `list_pending.sh` — SessionStart hook. Prints any pending proposals so they aren't forgotten between sessions.
 
 ### Trigger (multi-signal, mirrors self-improving-skills)
@@ -24,9 +24,9 @@ Precedence: `SKILL_MANAGE_THRESHOLD` env var > `config.json["trigger"]` > defaul
 
 ### write_approval
 
-`config.json` `"write_approval"` (default `true`) mirrors Hermes' own flag:
+`config.json` `"write_approval"` (default `true`) mirrors that kind of flag:
 - `true` — `pending.py new` only stages the proposal; nothing touches `.claude/skills/` until `approve <id>`.
-- `false` — `pending.py new` applies immediately (skip the queue), same effect as Hermes running with the gate disabled. Use only in trusted/throwaway setups.
+- `false` — `pending.py new` applies immediately (skip the queue), same effect as running with the gate disabled. Use only in trusted/throwaway setups.
 
 ### scope
 

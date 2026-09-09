@@ -1,6 +1,6 @@
 ---
 disable-model-invocation: true
-description: 'Forks a skill from a URL (Anthropic, OpenAI, Hermes, or any agentskills.io-compatible repo) into the project skills directory — evaluates fit, strips dead weight, applies project conventions, stamps provenance, and checks the trigger before writing.'
+description: 'Forks a skill from a URL (Anthropic, OpenAI, or any agentskills.io-compatible repo) into the project skills directory — evaluates fit, strips dead weight, applies project conventions, stamps provenance, and checks the trigger before writing.'
 argument-hint: '[skill URL: GitHub tree, raw SKILL.md, or repo/path]'
 allowed-tools: [
   'Read',

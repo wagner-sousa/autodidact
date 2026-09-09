@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SessionStart hook: surface any autodidact proposals still waiting for
-# approval, since they survive restarts (Hermes-style pending queue).
+# approval, since they survive restarts (pending queue).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT=$(python3 "$SCRIPT_DIR/pending.py" list)

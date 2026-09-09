@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)
 
-> A procedural-memory self-improvement loop for any [agentskills.io](https://agentskills.io)-compatible AI coding agent, modeled on Hermes Agent's `skill_manage` tool and its `write_approval` gate.
+> A procedural-memory self-improvement loop for any [agentskills.io](https://agentskills.io)-compatible AI coding agent, modeled on a `skill_manage`-style tool and its `write_approval` gate.
 
 ---
 
@@ -22,7 +22,7 @@ on a preference the code doesn't state. That knowledge is usually gone at the en
 the session. autodidact turns the highest-signal moments of a conversation into
 durable, reusable skills — without ever writing to disk without a review step.
 
-Two triggers, mirroring how Hermes actually works:
+Two triggers, mirroring that pattern:
 
 - **The agent's own judgment (primary).** At the natural end of any task, regardless
   of whether a hook fired.
@@ -30,7 +30,7 @@ Two triggers, mirroring how Hermes actually works:
   last turn and injects a reminder past a threshold — a cheap catch-all, not a
   substitute for judgment.
 
-Six proposal actions, mirroring Hermes' `skill_manage`: `create`, `patch`, `edit`,
+Six proposal actions, mirroring that `skill_manage` shape: `create`, `patch`, `edit`,
 `delete`, `write_file`, `remove_file`.
 
 ---
