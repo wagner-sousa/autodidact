@@ -51,7 +51,7 @@ Six proposal actions, mirroring Hermes' `skill_manage`: `create`, `patch`, `edit
 
 - Any [agentskills.io](https://agentskills.io)-compatible AI coding agent with
   Stop/UserPromptSubmit/SessionStart-equivalent hooks (e.g. Claude Code, OpenCode).
-- Python 3, available on `PATH` as `python`.
+- Python 3, available on `PATH` as `python3`.
 - Bash, for the two shell hooks.
 - Optionally, a `skill-creator` skill installed in your project — see
   [Pairing with a skill-creator](#pairing-with-a-skill-creator) below. autodidact
@@ -85,14 +85,14 @@ script filename, and handles both relative and absolute command paths:
 
 ```bash
 # Project-level (.claude/settings.json)
-python .claude/skills/autodidact/scripts/install_hooks.py
+python3 .claude/skills/autodidact/scripts/install_hooks.py
 
 # User-level (~/.claude/settings.json) — hooks use absolute paths so they work
 # in any project
-python .claude/skills/autodidact/scripts/install_hooks.py --user
+python3 .claude/skills/autodidact/scripts/install_hooks.py --user
 
 # Dry-run: check status without writing
-python .claude/skills/autodidact/scripts/install_hooks.py --check
+python3 .claude/skills/autodidact/scripts/install_hooks.py --check
 ```
 
 Alternatively, `hooks/hooks.json` contains the ready-to-use
@@ -183,10 +183,10 @@ judgment-driven path. To drive it explicitly:
 Manage proposals directly with the queue CLI:
 
 ```bash
-python .claude/skills/autodidact/scripts/pending.py list
-python .claude/skills/autodidact/scripts/pending.py show <id>
-python .claude/skills/autodidact/scripts/pending.py approve <id>
-python .claude/skills/autodidact/scripts/pending.py reject <id>
+python3 .claude/skills/autodidact/scripts/pending.py list
+python3 .claude/skills/autodidact/scripts/pending.py show <id>
+python3 .claude/skills/autodidact/scripts/pending.py approve <id>
+python3 .claude/skills/autodidact/scripts/pending.py reject <id>
 ```
 
 ### Pairing with a skill-creator

@@ -58,13 +58,13 @@ Add to `.claude/settings.json`:
   "hooks": {
     "Stop": [
       { "hooks": [
-        { "type": "command", "command": "python .claude/skills/autodidact/scripts/detect_complexity.py" }
+        { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/detect_complexity.py" }
       ]}
     ],
     "UserPromptSubmit": [
       { "hooks": [
         { "type": "command", "command": "bash .claude/skills/autodidact/scripts/inject_reminder.sh" },
-        { "type": "command", "command": "python .claude/skills/autodidact/scripts/detect_domain_recurrence.py" }
+        { "type": "command", "command": "python3 .claude/skills/autodidact/scripts/detect_domain_recurrence.py" }
       ]}
     ],
     "SessionStart": [
@@ -96,13 +96,13 @@ Then wire the hooks automatically with the install script (idempotent — safe t
 
 ```bash
 # Install into project-level settings (.claude/settings.json)
-python .claude/skills/autodidact/scripts/install_hooks.py
+python3 .claude/skills/autodidact/scripts/install_hooks.py
 
 # Or install into user-level settings (~/.claude/settings.json)
-python .claude/skills/autodidact/scripts/install_hooks.py --user
+python3 .claude/skills/autodidact/scripts/install_hooks.py --user
 
 # Check status without writing
-python .claude/skills/autodidact/scripts/install_hooks.py --check
+python3 .claude/skills/autodidact/scripts/install_hooks.py --check
 ```
 
 The script detects existing hooks by script filename (basename match), so it handles

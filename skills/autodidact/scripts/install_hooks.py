@@ -5,7 +5,7 @@ Install autodidact hooks into .claude/settings.json (project) or
 Idempotent: skips any hook whose script name is already present in the event.
 
 Usage:
-  python .claude/skills/autodidact/scripts/install_hooks.py [--check] [--user]
+  python3 .claude/skills/autodidact/scripts/install_hooks.py [--check] [--user]
   --check   only report status, do not write
   --user    install to ~/.claude/settings.json instead of project settings
 """
@@ -27,11 +27,11 @@ def _required_hooks(user_level):
         skill_dir = ".claude/skills/autodidact/scripts"
     return {
         "Stop": [
-            f"python {skill_dir}/detect_complexity.py",
+            f"python3 {skill_dir}/detect_complexity.py",
         ],
         "UserPromptSubmit": [
             f"bash {skill_dir}/inject_reminder.sh",
-            f"python {skill_dir}/detect_domain_recurrence.py",
+            f"python3 {skill_dir}/detect_domain_recurrence.py",
         ],
         "SessionStart": [
             f"bash {skill_dir}/list_pending.sh",
