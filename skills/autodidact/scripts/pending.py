@@ -12,13 +12,16 @@ Usage:
                   [--file <relative/path>=<path-to-staged-content-on-disk>]... \
                   [--scope project|user]
   pending.py list
-  pending.py show <id>
+  pending.py show <id>       # full manifest + staged file content
+  pending.py diff <id>       # unified diff: current skill vs staged
   pending.py approve <id>
   pending.py reject <id>
 """
 import argparse
+import difflib
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -75,7 +78,55 @@ def _load_manifest(entry_id):
         return manifest_path, json.load(f)
 
 
+FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+
+
+def _validate_skill_md(rel_path, content, target):
+    """Deterministic sanity checks only — no LLM judgment here. Catches the
+    obvious breakage (missing/malformed frontmatter, name/dir mismatch)
+    before it reaches the approval queue; anything requiring domain
+    judgment is skill-creator's job, not this script's."""
+    if os.path.basename(rel_path) != "SKILL.md":
+        return []
+
+    errors = []
+    match = FRONTMATTER_RE.match(content)
+    if not match:
+        errors.append(f"{rel_path}: missing or malformed YAML frontmatter (must start with '---' block)")
+        return errors
+
+    frontmatter = match.group(1)
+    name_match = re.search(r"^name:\s*(.+)$", frontmatter, re.MULTILINE)
+    desc_match = re.search(r"^description:\s*(.+)$", frontmatter, re.MULTILINE)
+
+    if not name_match:
+        errors.append(f"{rel_path}: frontmatter missing 'name' field")
+    elif target and name_match.group(1).strip().strip("\"'") != target:
+        errors.append(
+            f"{rel_path}: frontmatter name '{name_match.group(1).strip()}' "
+            f"does not match target skill '{target}'"
+        )
+
+    if not desc_match or not desc_match.group(1).strip():
+        errors.append(f"{rel_path}: frontmatter missing or empty 'description' field")
+
+    return errors
+
+
 def cmd_new(args):
+    errors = []
+    for spec in args.file or []:
+        rel_path, staged_content_path = spec.split("=", 1)
+        if args.action not in ("delete", "remove_file") and os.path.basename(rel_path) == "SKILL.md":
+            with open(staged_content_path) as fh:
+                errors.extend(_validate_skill_md(rel_path, fh.read(), args.target))
+
+    if errors:
+        for err in errors:
+            print(f"pending.py new: {err}", file=sys.stderr)
+        print("pending.py new: refusing to stage, fix the errors above first", file=sys.stderr)
+        sys.exit(1)
+
     os.makedirs(PENDING_DIR, exist_ok=True)
     entry_id = str(int(time.time() * 1000))
     entry_dir = os.path.join(PENDING_DIR, entry_id)
@@ -129,6 +180,37 @@ def cmd_show(args):
                 print(fh.read())
 
 
+def cmd_diff(args):
+    manifest_path, manifest = _load_manifest(args.id)
+    action = manifest["action"]
+    target = manifest["target_skill"]
+    skills_root = _skills_root(manifest.get("scope"))
+    base = os.path.join(skills_root, target) if target else skills_root
+    files_dir = os.path.join(os.path.dirname(manifest_path), "files")
+    any_diff = False
+
+    for f in manifest["files"]:
+        staged = os.path.join(files_dir, f["staged_name"])
+        dest = os.path.join(base, f["path"])
+
+        staged_lines = open(staged).readlines() if os.path.exists(staged) else []
+        current_lines = open(dest).readlines() if os.path.exists(dest) else []
+
+        if action == "remove_file":
+            staged_lines = []
+
+        diff = list(difflib.unified_diff(
+            current_lines, staged_lines,
+            fromfile=f"a/{f['path']}", tofile=f"b/{f['path']}",
+        ))
+        if diff:
+            any_diff = True
+            print("".join(diff))
+
+    if not any_diff:
+        print(f"no changes (staged matches current or files are new with identical content)")
+
+
 def cmd_approve(args):
     manifest_path, manifest = _load_manifest(args.id)
     entry_dir = os.path.dirname(manifest_path)
@@ -161,6 +243,10 @@ def main():
     p_new.set_defaults(func=cmd_new)
 
     sub.add_parser("list").set_defaults(func=cmd_list)
+
+    p_diff = sub.add_parser("diff")
+    p_diff.add_argument("id")
+    p_diff.set_defaults(func=cmd_diff)
 
     p_show = sub.add_parser("show")
     p_show.add_argument("id")

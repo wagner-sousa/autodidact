@@ -84,6 +84,7 @@ For `create`, `edit`, and `write_file`, `--file` can be repeated for multiple fi
 
 Never write to `.claude/skills/` outside this queue. The pending queue survives restarts (`.state/pending/`, gitignored) and is surfaced automatically at `SessionStart` (`scripts/list_pending.sh`) so nothing gets lost between sessions.
 
+- **Review**: `python3 .claude/skills/autodidact/scripts/pending.py diff <id>` — unified diff of staged files against what's currently on disk, faster than reading the full staged content for a `patch`/`edit`.
 - **Approve**: `python3 .claude/skills/autodidact/scripts/pending.py approve <id>` — applies the staged files/removal to `.claude/skills/`.
 - **Reject**: `python3 .claude/skills/autodidact/scripts/pending.py reject <id>` — discards, no trace left.
 - If the user asks to see or decide on a proposal in conversation ("approve skill X", "what's pending"), run `pending.py list`/`show`/`approve`/`reject` on their behalf rather than making them type the command.
