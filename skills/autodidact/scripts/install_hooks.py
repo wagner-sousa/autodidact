@@ -28,6 +28,7 @@ def _required_hooks(user_level):
     return {
         "Stop": [
             f"python3 {skill_dir}/detect_complexity.py",
+            f"python3 {skill_dir}/detect_pending_completion.py",
         ],
         "UserPromptSubmit": [
             f"python3 {skill_dir}/inject_reminder.py",

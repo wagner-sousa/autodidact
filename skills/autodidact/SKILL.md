@@ -1,6 +1,6 @@
 ---
 name: autodidact
-description: "Procedural memory self-improvement loop (skill_manage-style). Self-evaluates at the end of any task, complex or not, whether a workflow deserves to become or update a skill; the Stop-hook tool-count nudge is only a cheap backstop. Stages proposals to an async approval queue (create/patch/edit/delete/write_file/remove_file) instead of asking yes/no inline. Triggers: pending skill review, review a skill, pending learning, you discovered something, approve skill, what's pending, pending skills."
+description: "Procedural memory self-improvement loop (skill_manage-style). Self-evaluates at the end of any task, complex or not, whether a workflow deserves to become or update a skill; the Stop-hook tool-count nudge is only a cheap backstop. Stages requests (create/patch/edit/delete/write_file/remove_file) to an async approval queue; approve triggers skill-creator to draft/write directly, a Stop hook auto-clears the request once done. Triggers: pending skill review, review a skill, pending learning, you discovered something, approve skill, what's pending, pending skills."
 ---
 
 # Autodidact — Procedural Memory Loop
@@ -14,7 +14,7 @@ Three paths, and all are valid — this mirrors that pattern: the trigger is the
 
 1. **Your own judgment (primary).** At the natural end of any task, ask yourself the questions below regardless of whether a hook fired. A workflow can be worth capturing after 2 tool calls (a genuinely tricky one-liner) or not worth it after 15 (repetitive, uninteresting). Don't wait for permission to evaluate.
 2. **The Stop hook nudge (backstop, cheap and dumb on purpose).** `scripts/detect_complexity.py` runs on every turn. It unconditionally prints a reminder covering four capture-worthy criteria: (a) 5+ tool calls that succeeded, (b) an error or dead end you worked around, (c) the user correcting your approach, or (d) a non-obvious flow you discovered. (b)-(d) can happen in one or two tool calls — no tool-count threshold would ever catch them, so the reminder fires every turn regardless of volume. Separately, it also counts `tool_use` blocks and, past the configured threshold, writes a marker so `inject_reminder.py` injects a richer count-based nudge at the start of the next turn. Neither path is a substitute for judgment — crossing a threshold, or a turn ending at all, does not mean you must propose something.
-3. **The domain-recurrence nudge (detection-only, unlike a hypothetical auto-generator).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. It never generates skill content and never stages a proposal itself — a deterministic script has no domain knowledge beyond a name match, and drafting real content is inherently an LLM job. Once it fires, it reminds the agent to invoke `skill-creator` to draft the skill, then stage the result via `pending.py new`. It fires on every subsequent mention (not just the first) until the skill directory exists.
+3. **The domain-recurrence nudge (detection-only).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. It never generates skill content and never stages a request itself — a deterministic script has no domain knowledge beyond a name match. Once it fires, it reminds the agent to stage a request (`pending.py new --action create --target <domain>`). It fires on every subsequent mention (not just the first) until the skill directory exists.
 
 ## Evaluation checklist
 
@@ -52,58 +52,51 @@ Does any existing skill own this topic?
 
 Read the current skill index before deciding: list `.claude/skills/` and skim the descriptions.
 
-## Drafting and guarding (background fork)
+## Proposal format — request only, no content
 
-Drafting a skill (invoking `skill-creator`'s interactive draft→test→review flow) and guarding it structurally both belong off the main conversation — they're noisy (exploration, iteration) and the main session shouldn't block on them. Use a **fork** (Claude Code's `Agent` tool with `subagent_type: "fork"`, or your agent's equivalent background-with-shared-context mechanism): it inherits full context, runs in the background, and keeps its tool output out of the main session — you keep working while it drafts, guards, and stages.
+`pending.py new` records that a create/patch/edit/delete/write_file/remove_file is wanted — it never carries the skill's content. No drafting happens at this point, so no fork is needed just to stage:
+
+```bash
+python3 .claude/skills/autodidact/scripts/pending.py new --action patch --target <skill-name>
+```
+
+For `remove_file`, add `--path <relative-path>` (the only case that needs a path — nothing to draft, just a removal target). `pending.py new` always queues and prints the entry id. Tell the user, in one line, that a request was staged and how to act on it — don't wait for a reply before moving on:
+```
+autodidact: staged <action> for <skill-name> (id <id>) — "approve <id>" / "reject <id>" whenever convenient.
+```
+
+## Approval and drafting (background fork)
+
+Never write to `.claude/skills/` outside this flow. The pending queue survives restarts (`.state/pending/`, gitignored) and is surfaced automatically at `SessionStart` (`list_pending.py`) so nothing gets lost between sessions.
+
+- **Approve**: `python3 .claude/skills/autodidact/scripts/pending.py approve <id>`.
+  - For `delete`/`remove_file`: applies immediately (nothing to draft) and clears the entry itself.
+  - For `create`/`patch`/`edit`/`write_file`: stamps the entry "approved" and prints an instruction to invoke `skill-creator` now for that target — **this is your cue to draft**. The entry is NOT removed yet; it stays queued until the skill actually lands on disk.
+- **Reject**: `python3 .claude/skills/autodidact/scripts/pending.py reject <id>` — discards, no trace left.
+- If the user asks to see or decide on a proposal in conversation ("approve skill X", "what's pending"), run `pending.py list`/`show`/`approve`/`reject` on their behalf rather than making them type the command.
+
+Once approved, drafting is noisy (exploration, iteration) and doesn't belong in the main conversation. Use a **fork** (Claude Code's `Agent` tool with `subagent_type: "fork"`, or your agent's equivalent background-with-shared-context mechanism): it inherits full context, runs in the background, and keeps its tool output out of the main session.
 
 See [SKILL_CREATOR.md](SKILL_CREATOR.md) for how to get a `skill-creator` skill (fork Anthropic's or OpenAI's implementation) into your project.
 
 1. Launch a fork with a directive like:
    ```
-   Draft and stage a skill for <target>:
-   1. Invoke skill-creator to draft SKILL.md for this domain (or patch the existing one).
-   2. Structurally validate: frontmatter complete, name matches target, description non-empty, no orphaned references.
-   3. If valid: pending.py new --action <action> --target <target> --summary "..." \
-        --file "SKILL.md=<temp_path>" (repeat --file for extra reference files).
-   4. SendMessage("main", "autodidact: staged <action> for <target> (id <id>) — approve/reject whenever ready.")
-   5. If invalid: SendMessage("main", "autodidact: draft failed guard for <target> — <concrete errors>. Needs manual fix before staging.")
+   An autodidact request for <action> on '<target>' was just approved (id <id>).
+   1. Invoke skill-creator to draft SKILL.md for this domain (or patch/edit/extend
+      the existing one) — write directly to .claude/skills/<target>/, no staging step.
+   2. SendMessage("main", "autodidact: <target> is ready — skill-creator finished (id <id>).")
+   3. If you can't produce something you're confident in, SendMessage("main",
+      "autodidact: couldn't draft <target> (id <id>) — <why>. Needs manual attention.")
+      and leave the entry approved-but-pending rather than writing something bad.
    ```
-2. Don't wait for the fork — continue your own turn. `pending.py new` still runs its own structural validation (frontmatter, `name`/target match) and refuses to stage on error, so a bad draft never reaches the queue; the fork's `SendMessage` in step 5 covers that failure case for you.
-3. When the fork's message arrives, relay it to the user in one line if you're still in the same session — otherwise it's already queued and `list_pending.py` will surface it at the next `SessionStart`.
+2. Don't wait for the fork — continue your own turn. The `detect_pending_completion.py` Stop hook watches `.claude/skills/<target>/` and clears the pending entry automatically once it sees the files change after the approval timestamp — no manual cleanup needed.
+3. When the fork's message arrives, relay it to the user in one line if you're still in the same session.
 
-Skip forking (and the guard) only for `delete`/`remove_file` (nothing to draft) and for trivial `write_file` additions (e.g. a reference doc, not `SKILL.md` itself) — stage those directly with `pending.py new`, no drafting needed. If your project has no `skill-creator` skill installed, skip drafting/guarding entirely and stage a hand-written `SKILL.md` yourself rather than blocking the proposal.
-
-## Proposal format
-
-Every proposal — whether staged directly by you or by a fork — goes through `pending.py new`, never a direct write. It always queues and never blocks the turn on a yes/no:
-
-```bash
-python3 .claude/skills/autodidact/scripts/pending.py new \
-  --action patch --target <skill-name> \
-  --summary "one line: what and why" \
-  --file "references/new-doc.md=/tmp/staged-content.md"
-```
-
-`pending.py new` always queues and prints the entry id. Tell the user, in one line, that a proposal was staged and how to act on it — don't wait for a reply before moving on:
-```
-autodidact: staged <action> for <skill-name> (id <id>) — "python3 .claude/skills/autodidact/scripts/pending.py show <id>" to review, "approve <id>" / "reject <id>" to decide, whenever convenient.
-```
-
-For `create`, `edit`, and `write_file`, `--file` can be repeated for multiple files. For `delete`/`remove_file`, omit `--file` content (staging still records which paths/target will be removed).
-
-## Approval
-
-Never write to `.claude/skills/` outside this queue. The pending queue survives restarts (`.state/pending/`, gitignored) and is surfaced automatically at `SessionStart` (`scripts/list_pending.sh`) so nothing gets lost between sessions.
-
-- **Review**: `python3 .claude/skills/autodidact/scripts/pending.py diff <id>` — unified diff of staged files against what's currently on disk, faster than reading the full staged content for a `patch`/`edit`.
-- **Approve**: `python3 .claude/skills/autodidact/scripts/pending.py approve <id>` — applies the staged files/removal to `.claude/skills/`.
-- **Reject**: `python3 .claude/skills/autodidact/scripts/pending.py reject <id>` — discards, no trace left.
-- If the user asks to see or decide on a proposal in conversation ("approve skill X", "what's pending"), run `pending.py list`/`show`/`approve`/`reject` on their behalf rather than making them type the command.
-- After an approval that touches tracked files, follow the project's commit convention if the user wants it committed — don't commit unprompted.
+Skip the fork only for trivial hand-edits you're already confident about. If your project has no `skill-creator` skill installed, draft the `SKILL.md` yourself instead of blocking the request — same completion detection applies either way.
 
 ## Portability
 
-This skill and its scripts form a self-contained plugin: `detect_complexity.py` (Stop backstop), `inject_reminder.py` (UserPromptSubmit nudge), `detect_domain_recurrence.py` (UserPromptSubmit domain-recurrence backstop), `pending.py` (async approval queue), `list_pending.py` (SessionStart visibility), `install_hooks.py` (hook installer).
+This skill and its scripts form a self-contained plugin: `detect_complexity.py` (Stop backstop), `inject_reminder.py` (UserPromptSubmit nudge), `detect_domain_recurrence.py` (UserPromptSubmit domain-recurrence backstop), `pending.py` (request/approval queue), `detect_pending_completion.py` (Stop hook, auto-clears approved entries once skill-creator finishes), `list_pending.py` (SessionStart visibility), `install_hooks.py` (hook installer).
 To install in a project (Claude Code, OpenCode, or any agent that supports agentskills.io + equivalent hooks):
 1. Copy this directory to `.claude/skills/autodidact/` (or equivalent skills path — see `scope` in Configuration below for `.claude/skills/` vs `~/.claude/skills/`).
 2. Run `python3 .claude/skills/autodidact/scripts/install_hooks.py` (add `--user` to wire `~/.claude/settings.json` instead of the project's) — it is idempotent, safe to re-run, and validates existing hooks before writing. Use `--check` to only report status. On agents other than Claude Code, add the hook entries from [README.md](README.md) to the project's hook config manually instead.

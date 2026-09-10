@@ -211,14 +211,16 @@ graph TB
     Task[Agent finishes a task] --> Judge{Worth capturing?}
     Hook[Stop hook: unconditional reminder + tool-count backstop] -.reminder.-> Judge
     Judge -- no --> Skip[Skip silently]
-    Judge -- yes --> Fork[Fork subagent: skill-creator draft + guard — background]
-    Fork -- staged --> Queue[(.state/pending/id)]
-    Fork -- guard failed --> Fix[Fork notifies main via SendMessage — manual fix]
+    Judge -- yes --> Stage[pending.py new: request only, no content]
+    Stage --> Queue[(.state/pending/id — manifest.json)]
     Queue --> Review{User approves?}
-    Review -- approve --> Apply[Apply + post-approve validation]
-    Apply -- valid --> Skills[(.claude/skills/)]
-    Apply -- invalid --> Rollback[Rollback + entry stays queued]
     Review -- reject --> Discard[Discard, no trace]
+    Review -- approve --> Mechanical{delete / remove_file?}
+    Mechanical -- yes --> Applied[Applied immediately, entry cleared]
+    Mechanical -- no --> Fork[Fork subagent: skill-creator drafts, writes directly to .claude/skills/]
+    Fork -.background.-> Skills[(.claude/skills/)]
+    Skills --> Watch[Stop hook: detect_pending_completion.py]
+    Watch -- files changed since approval --> Cleared[Entry auto-cleared]
 ```
 
 ---

@@ -1,35 +1,37 @@
 #!/usr/bin/env python
-"""autodidact pending queue — async approval queue.
+"""autodidact pending queue — a request/approval gate, not a content stage.
 
-Instead of asking for a yes/no in the same turn, a proposal is staged as a
-pending entry that survives restarts. The user reviews and approves/rejects
-whenever they want, in a later session if needed. Every proposal is queued —
-nothing is ever written to .claude/skills/ without an explicit approve.
+A pending entry only records THAT a skill creation/update is wanted — it
+never carries the skill's content. Content generation is entirely
+skill-creator's job, and it happens AFTER approve, writing straight to
+.claude/skills/<target>/ instead of into this queue.
 
-approve re-validates the applied SKILL.md files against the same structural
-checks new() runs, and rolls back to the pre-apply snapshot (or deletes a
-newly-created dir) if anything comes out malformed — the entry stays queued
-for a fix and re-approve instead of leaving a broken skill on disk.
+Flow:
+  1. pending.py new --action create --target <name>   (records the request)
+  2. user reviews, runs pending.py approve <id> whenever ready
+  3. approve stamps the entry "approved" and tells the agent to invoke
+     skill-creator now for that target/action
+  4. skill-creator writes the skill directly to .claude/skills/<target>/
+  5. the detect_pending_completion.py Stop hook notices the target's files
+     changed since approval and deletes the pending entry automatically
+
+delete/remove_file need no generation, so approve applies them immediately
+and clears the entry itself, no hook involved.
 
 Usage:
   pending.py new --action create|patch|edit|delete|write_file|remove_file \
-                  --target <skill-name-or-empty> --summary "..." \
-                  [--file <relative/path>=<path-to-staged-content-on-disk>]... \
-                  [--scope project|user]
+                  --target <skill-name> [--scope project|user] \
+                  [--path <relative-path>]   # required for remove_file
   pending.py list
-  pending.py show <id>       # full manifest + staged file content
-  pending.py diff <id>       # unified diff: current skill vs staged
+  pending.py show <id>
   pending.py approve <id>
   pending.py reject <id>
 """
 import argparse
-import difflib
 import json
 import os
-import re
 import shutil
 import sys
-import tempfile
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +40,9 @@ PROJECT_SKILLS_ROOT = os.path.join(SKILL_DIR, "..")
 USER_SKILLS_ROOT = os.path.join(os.path.expanduser("~"), ".claude", "skills")
 PENDING_DIR = os.path.join(SKILL_DIR, ".state", "pending")
 CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
+
+GENERATED_ACTIONS = ("create", "patch", "edit", "write_file")
+MECHANICAL_ACTIONS = ("delete", "remove_file")
 
 
 def _load_config():
@@ -48,31 +53,8 @@ def _load_config():
 
 
 def _skills_root(scope_override=None):
-    """'project' (default) -> .claude/skills/ of this repo, versioned.
-    'user' -> ~/.claude/skills/, survives git clone/reset, shared across projects."""
     scope = scope_override or _load_config().get("scope", "project")
     return USER_SKILLS_ROOT if scope == "user" else PROJECT_SKILLS_ROOT
-
-
-def _apply(action, target, file_contents, files, scope=None):
-    skills_root = _skills_root(scope)
-    if action in ("create", "patch", "edit", "write_file"):
-        base = os.path.join(skills_root, target) if target else skills_root
-        for f in files:
-            dest = os.path.join(base, f["path"])
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            with open(dest, "w") as fh:
-                fh.write(file_contents.get(f["path"], ""))
-    elif action == "delete":
-        target_path = os.path.join(skills_root, target)
-        if os.path.isdir(target_path):
-            shutil.rmtree(target_path)
-    elif action == "remove_file":
-        base = os.path.join(skills_root, target) if target else skills_root
-        for f in files:
-            dest = os.path.join(base, f["path"])
-            if os.path.exists(dest):
-                os.remove(dest)
 
 
 def _load_manifest(entry_id):
@@ -84,57 +66,17 @@ def _load_manifest(entry_id):
         return manifest_path, json.load(f)
 
 
-FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
-
-
-def _validate_skill_md(rel_path, content, target):
-    """Deterministic sanity checks only — no LLM judgment here. Catches the
-    obvious breakage (missing/malformed frontmatter, name/dir mismatch)
-    before it reaches the approval queue; anything requiring domain
-    judgment is skill-creator's job, not this script's."""
-    if os.path.basename(rel_path) != "SKILL.md":
-        return []
-
-    errors = []
-    match = FRONTMATTER_RE.match(content)
-    if not match:
-        errors.append(f"{rel_path}: missing or malformed YAML frontmatter (must start with '---' block)")
-        return errors
-
-    frontmatter = match.group(1)
-    name_match = re.search(r"^name:\s*(.+)$", frontmatter, re.MULTILINE)
-    desc_match = re.search(r"^description:\s*(.+)$", frontmatter, re.MULTILINE)
-
-    if not name_match:
-        errors.append(f"{rel_path}: frontmatter missing 'name' field")
-    elif target and name_match.group(1).strip().strip("\"'") != target:
-        errors.append(
-            f"{rel_path}: frontmatter name '{name_match.group(1).strip()}' "
-            f"does not match target skill '{target}'"
-        )
-
-    if not desc_match or not desc_match.group(1).strip():
-        errors.append(f"{rel_path}: frontmatter missing or empty 'description' field")
-
-    return errors
+def _save_manifest(manifest_path, manifest):
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
 
 
 def cmd_new(args):
-    file_contents = {}
-    errors = []
-    for spec in args.file or []:
-        rel_path, staged_content_path = spec.split("=", 1)
-        if args.action not in ("delete", "remove_file"):
-            with open(staged_content_path) as fh:
-                content = fh.read()
-            if os.path.basename(rel_path) == "SKILL.md":
-                errors.extend(_validate_skill_md(rel_path, content, args.target))
-            file_contents[rel_path] = content
-
-    if errors:
-        for err in errors:
-            print(f"pending.py new: {err}", file=sys.stderr)
-        print("pending.py new: refusing to stage, fix the errors above first", file=sys.stderr)
+    if args.action == "remove_file" and not args.path:
+        print("pending.py new: --path is required for remove_file", file=sys.stderr)
+        sys.exit(1)
+    if args.action not in MECHANICAL_ACTIONS and not args.target:
+        print("pending.py new: --target is required for this action", file=sys.stderr)
         sys.exit(1)
 
     os.makedirs(PENDING_DIR, exist_ok=True)
@@ -142,21 +84,16 @@ def cmd_new(args):
     entry_dir = os.path.join(PENDING_DIR, entry_id)
     os.makedirs(entry_dir, exist_ok=True)
 
-    files = [{"path": rel_path} for spec in (args.file or [])
-             for rel_path, _ in [spec.split("=", 1)]]
-
     manifest = {
         "id": entry_id,
         "action": args.action,
         "target_skill": args.target or None,
         "scope": args.scope,
-        "summary": args.summary,
+        "path": args.path if args.action == "remove_file" else None,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "files": files,
-        "file_contents": file_contents,
+        "approved_at": None,
     }
-    with open(os.path.join(entry_dir, "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=2)
+    _save_manifest(os.path.join(entry_dir, "manifest.json"), manifest)
 
     print(entry_id)
 
@@ -170,68 +107,26 @@ def cmd_list(_args):
     for entry_id in entries:
         _, manifest = _load_manifest(entry_id)
         target = manifest["target_skill"] or "(new)"
-        print(f"{entry_id}\t{manifest['action']}\t{target}\t{manifest['summary']}")
+        status = "awaiting skill-creator" if manifest.get("approved_at") else "awaiting approval"
+        print(f"{entry_id}\t{manifest['action']}\t{target}\t{status}")
 
 
 def cmd_show(args):
     _, manifest = _load_manifest(args.id)
     print(json.dumps(manifest, indent=2))
-    file_contents = manifest.get("file_contents", {})
-    for f in manifest["files"]:
-        content = file_contents.get(f["path"])
-        if content is not None:
-            print(f"\n--- {f['path']} ---")
-            print(content)
 
 
-def cmd_diff(args):
-    _, manifest = _load_manifest(args.id)
-    action = manifest["action"]
-    target = manifest["target_skill"]
-    skills_root = _skills_root(manifest.get("scope"))
-    base = os.path.join(skills_root, target) if target else skills_root
-    file_contents = manifest.get("file_contents", {})
-    any_diff = False
-
-    for f in manifest["files"]:
-        content = file_contents.get(f["path"])
-        dest = os.path.join(base, f["path"])
-
-        staged_lines = content.splitlines(keepends=True) if content is not None else []
-        current_lines = open(dest).readlines() if os.path.exists(dest) else []
-
-        if action == "remove_file":
-            staged_lines = []
-
-        diff = list(difflib.unified_diff(
-            current_lines, staged_lines,
-            fromfile=f"a/{f['path']}", tofile=f"b/{f['path']}",
-        ))
-        if diff:
-            any_diff = True
-            print("".join(diff))
-
-    if not any_diff:
-        print(f"no changes (staged matches current or files are new with identical content)")
-
-
-def _snapshot(path):
-    """Back up path to a tempdir before applying. Returns the tempdir, or None
-    if path doesn't exist yet (nothing to restore, just delete on rollback)."""
-    if not os.path.isdir(path):
+def _skill_mtime(base):
+    """Latest mtime among all files under base, or None if base doesn't exist."""
+    if not os.path.isdir(base):
         return None
-    snap = tempfile.mkdtemp(prefix="autodidact-snap-")
-    shutil.copytree(path, os.path.join(snap, "content"))
-    return snap
-
-
-def _restore(target_path, snapshot):
-    """Revert target_path to snapshot's content, discarding the snapshot dir."""
-    if os.path.isdir(target_path):
-        shutil.rmtree(target_path)
-    if snapshot:
-        shutil.move(os.path.join(snapshot, "content"), target_path)
-        shutil.rmtree(snapshot, ignore_errors=True)
+    latest = None
+    for root, _dirs, files in os.walk(base):
+        for name in files:
+            mtime = os.path.getmtime(os.path.join(root, name))
+            if latest is None or mtime > latest:
+                latest = mtime
+    return latest
 
 
 def cmd_approve(args):
@@ -241,44 +136,42 @@ def cmd_approve(args):
     target = manifest["target_skill"]
     scope = manifest.get("scope")
     skills_root = _skills_root(scope)
-    base = os.path.join(skills_root, target) if target else skills_root
 
-    snapshot = None
-    if action in ("create", "patch", "edit", "write_file") and target:
-        snapshot = _snapshot(base)
+    if action in MECHANICAL_ACTIONS:
+        if action == "delete":
+            target_path = os.path.join(skills_root, target)
+            if os.path.isdir(target_path):
+                shutil.rmtree(target_path)
+        elif action == "remove_file":
+            dest = os.path.join(skills_root, target, manifest["path"])
+            if os.path.exists(dest):
+                os.remove(dest)
+        shutil.rmtree(entry_dir)
+        print(f"approved {args.id}: {action} {target or '(new)'}")
+        return
 
-    _apply(action, target, manifest.get("file_contents", {}), manifest["files"], scope)
-
-    errors = []
-    if action in ("create", "patch", "edit", "write_file"):
-        for f in manifest["files"]:
-            if os.path.basename(f["path"]) == "SKILL.md":
-                dest = os.path.join(base, f["path"])
-                if os.path.exists(dest):
-                    with open(dest) as fh:
-                        errors.extend(_validate_skill_md(f["path"], fh.read(), target))
-
-    if errors:
-        _restore(base, snapshot)
-        for err in errors:
-            print(f"pending.py approve: {err}", file=sys.stderr)
+    if manifest.get("approved_at"):
         print(
-            f"pending.py approve: post-apply validation failed, rolled back — "
-            f"entry {args.id} stays in the queue for a fix and re-approve.",
-            file=sys.stderr,
+            f"pending.py approve: {args.id} was already approved at "
+            f"{manifest['approved_at']} — still waiting for skill-creator to "
+            f"finish {action} on '{target}'."
         )
-        sys.exit(1)
+        return
 
-    if snapshot:
-        shutil.rmtree(snapshot, ignore_errors=True)
-    shutil.rmtree(entry_dir)
-    print(f"approved {args.id}: {action} {target or '(new)'}")
+    manifest["approved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    _save_manifest(manifest_path, manifest)
+
+    print(
+        f"approved {args.id}: invoke skill-creator now for {action} '{target}' "
+        f"(scope {scope or _load_config().get('scope', 'project')}) — write directly "
+        f"to .claude/skills/{target}/. This entry clears itself once the change lands."
+    )
 
 
 def cmd_reject(args):
     _, manifest = _load_manifest(args.id)
     shutil.rmtree(os.path.join(PENDING_DIR, args.id))
-    print(f"rejected {args.id}: {manifest['summary']}")
+    print(f"rejected {args.id}: {manifest['action']} {manifest['target_skill'] or '(new)'}")
 
 
 def main():
@@ -289,17 +182,12 @@ def main():
     p_new.add_argument("--action", required=True,
                         choices=["create", "patch", "edit", "delete", "write_file", "remove_file"])
     p_new.add_argument("--target", default="")
-    p_new.add_argument("--summary", required=True)
-    p_new.add_argument("--file", action="append")
-    p_new.add_argument("--scope", choices=["project", "user"], default=None,
-                        help="Overrides config.json's scope for this proposal only.")
+    p_new.add_argument("--scope", choices=["project", "user"], default=None)
+    p_new.add_argument("--path", default=None,
+                        help="remove_file only: relative path (within the target skill) to remove")
     p_new.set_defaults(func=cmd_new)
 
     sub.add_parser("list").set_defaults(func=cmd_list)
-
-    p_diff = sub.add_parser("diff")
-    p_diff.add_argument("id")
-    p_diff.set_defaults(func=cmd_diff)
 
     p_show = sub.add_parser("show")
     p_show.add_argument("id")
