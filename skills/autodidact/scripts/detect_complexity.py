@@ -22,6 +22,7 @@ DEFAULT_TRIGGER = {
     "readonly_threshold": 12,
 }
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
+READ_TOOLS = {"Read"}
 
 
 def get_trigger_config():
@@ -99,13 +100,22 @@ def last_turn_tool_calls(transcript_path):
     return len(tool_names), tool_names
 
 
-REMINDER = (
-    "autodidact: ao terminar, avalie se este turno teve (a) 5+ tool calls "
-    "com sucesso, (b) um erro/beco contornado, (c) o usuario corrigindo sua "
-    "abordagem, ou (d) um fluxo nao-obvio descoberto -> proponha via "
-    "pending.py new. Prefira patch a create. Sempre enfileire, nunca "
-    "escreva direto."
-)
+def build_reminder(count, edit_count, read_count, trigger):
+    """English, dynamic reminder — reports this turn's actual counts plus the
+    configured thresholds, instead of a hardcoded number that can drift out
+    of sync with config.json."""
+    return (
+        "autodidact: when you finish, evaluate whether this turn is worth "
+        "capturing as a new skill or a patch to an existing one. This turn: "
+        f"{count} tool call(s), {edit_count} file edit(s) (Edit/Write/NotebookEdit), "
+        f"{read_count} file read(s). Configured thresholds (config.json trigger): "
+        f"min_tool_calls={trigger['min_tool_calls']}, min_file_edits={trigger['min_file_edits']}, "
+        f"readonly_threshold={trigger['readonly_threshold']}. Criteria: (a) tool-call "
+        "volume crossed the threshold above, (b) an error or dead end you worked "
+        "around, (c) the user corrected your approach, or (d) a non-obvious flow "
+        "you discovered. If any apply, propose via pending.py new. Prefer patch "
+        "over create. Always queue, never write directly."
+    )
 
 
 def main():
@@ -117,12 +127,13 @@ def main():
     transcript_path = payload.get("transcript_path")
     count, tool_names = last_turn_tool_calls(transcript_path)
     edit_count = sum(1 for name in tool_names if name in EDIT_TOOLS)
+    read_count = sum(1 for name in tool_names if name in READ_TOOLS)
     trigger = get_trigger_config()
 
     # Unconditional: covers turns whose value isn't measured by tool-call
     # volume (a corrected approach, a dead end worked around, a non-obvious
     # discovery) — cases the count-based trigger below structurally can't see.
-    print(REMINDER)
+    print(build_reminder(count, edit_count, read_count, trigger))
 
     if not should_fire(count, edit_count, trigger):
         return
