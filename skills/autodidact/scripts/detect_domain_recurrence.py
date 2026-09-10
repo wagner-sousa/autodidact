@@ -6,19 +6,26 @@ extracts the user prompt, identifies referenced integration/domain names, and
 tracks per-domain mention counts in .state/domain_mentions.json.
 
 When a domain accumulates >= min_mentions without a corresponding skill
-directory, prints a reminder pointing the agent at skill-creator. This script
-never generates skill content itself and never stages a proposal — content
-generation is skill-creator's job, staging is pending.py's job; this hook is
-only a detector. The agent is expected to invoke skill-creator to draft the
-skill, then stage the result via pending.py new.
+directory, this script:
+  1. Calls pending.py new --action create --target <domain> to queue a request
+     (manifest only, no content — safe to call without user confirmation).
+  2. Prints an instruction for the agent to use AskUserQuestion to ask the user
+     whether to approve the staged request now, reject it, or decide later.
 
-Fires on every mention once the domain has reached min_mentions (insistent, not
-just at multiples) until the skill is created. When a skill is detected, resets
-the counter for that domain.
+If a pending entry for this target already exists (awaiting approval or
+skill-creator), skips staging a duplicate and just prints the reminder.
+
+This script never generates skill content and never calls approve — content
+generation is skill-creator's job, approval is the user's decision.
+
+Fires on every mention once the domain has reached min_mentions (insistent,
+not just at multiples) until the skill is created. When a skill is detected,
+resets the counter for that domain.
 """
 import json
 import os
 import re
+import subprocess
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +33,8 @@ SKILL_DIR = os.path.join(SCRIPT_DIR, "..")
 STATE_DIR = os.path.join(SKILL_DIR, ".state")
 CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
 MENTIONS_PATH = os.path.join(STATE_DIR, "domain_mentions.json")
+PENDING_DIR = os.path.join(STATE_DIR, "pending")
+PENDING_SCRIPT = os.path.join(SCRIPT_DIR, "pending.py")
 SKILLS_ROOT = os.path.join(SKILL_DIR, "..")
 
 DEFAULT_CONFIG = {
@@ -94,6 +103,39 @@ def skill_exists(skill_name):
 
 def skill_creator_available():
     return os.path.isdir(os.path.join(SKILLS_ROOT, "skill-creator"))
+
+
+def existing_pending_id(target):
+    """Return the id of an already-staged, non-rejected entry for target, or None."""
+    if not os.path.isdir(PENDING_DIR):
+        return None
+    for entry_id in os.listdir(PENDING_DIR):
+        manifest_path = os.path.join(PENDING_DIR, entry_id, "manifest.json")
+        if not os.path.exists(manifest_path):
+            continue
+        try:
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if manifest.get("target_skill") == target and manifest.get("action") == "create":
+            return entry_id
+    return None
+
+
+def stage_request(target):
+    """Call pending.py new --action create --target <target>, return the new id or None."""
+    try:
+        result = subprocess.run(
+            [sys.executable or "python3", PENDING_SCRIPT, "new",
+             "--action", "create", "--target", target],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+    except Exception:
+        return None
 
 
 def load_mentions():
@@ -171,20 +213,25 @@ def main():
 
     save_mentions(mentions)
 
-    has_skill_creator = skill_creator_available()
-
     for domain, count in to_remind:
-        if has_skill_creator:
+        entry_id = existing_pending_id(domain)
+        if entry_id is None:
+            entry_id = stage_request(domain)
+
+        if entry_id:
             print(
-                "autodidact: '{}' mentioned {} time(s) with no skill — invoke "
-                "skill-creator to draft one, then stage the result via "
-                "'pending.py new --action create --target {}'.".format(domain, count, domain)
+                "autodidact: '{}' mentioned {} time(s) with no skill — a create request "
+                "is queued (id {}). Use AskUserQuestion NOW to ask the user: approve "
+                "(then invoke skill-creator to draft it directly under "
+                ".claude/skills/{}/), reject, or decide later. Don't just print this "
+                "as a passive notice.".format(domain, count, entry_id, domain)
             )
         else:
             print(
-                "autodidact: '{}' mentioned {} time(s) with no .claude/skills/{}/ "
-                "and no skill-creator installed — draft a SKILL.md yourself and "
-                "stage it via pending.py new before ending this turn.".format(domain, count, domain)
+                "autodidact: '{}' mentioned {} time(s) with no skill and staging failed "
+                "(pending.py new errored) — run 'python3 .claude/skills/autodidact/scripts/"
+                "pending.py new --action create --target {}' yourself and ask the user "
+                "to approve.".format(domain, count, domain)
             )
 
 
