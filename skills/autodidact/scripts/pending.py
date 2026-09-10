@@ -39,6 +39,7 @@ SKILL_DIR = os.path.join(SCRIPT_DIR, "..")
 PROJECT_SKILLS_ROOT = os.path.join(SKILL_DIR, "..")
 USER_SKILLS_ROOT = os.path.join(os.path.expanduser("~"), ".claude", "skills")
 PENDING_DIR = os.path.join(SKILL_DIR, ".state", "pending")
+MENTIONS_PATH = os.path.join(SKILL_DIR, ".state", "domain_mentions.json")
 CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
 
 GENERATED_ACTIONS = ("create", "patch", "edit", "write_file")
@@ -98,16 +99,27 @@ def cmd_new(args):
     print(entry_id)
 
 
-def cmd_list(_args):
+def _entry_status(manifest):
+    if manifest.get("rejected_at"):
+        return "rejected"
+    if manifest.get("approved_at"):
+        return "awaiting skill-creator"
+    return "awaiting approval"
+
+
+def cmd_list(args):
     if not os.path.isdir(PENDING_DIR):
         return
     entries = sorted(os.listdir(PENDING_DIR))
     if not entries:
         return
+    show_all = getattr(args, "all", False)
     for entry_id in entries:
         _, manifest = _load_manifest(entry_id)
+        status = _entry_status(manifest)
+        if status == "rejected" and not show_all:
+            continue
         target = manifest["target_skill"] or "(new)"
-        status = "awaiting skill-creator" if manifest.get("approved_at") else "awaiting approval"
         print(f"{entry_id}\t{manifest['action']}\t{target}\t{status}")
 
 
@@ -131,6 +143,14 @@ def _skill_mtime(base):
 
 def cmd_approve(args):
     manifest_path, manifest = _load_manifest(args.id)
+    if manifest.get("rejected_at"):
+        print(
+            f"pending.py approve: {args.id} was rejected at {manifest['rejected_at']} "
+            f"— cannot approve a rejected entry. Stage a new request instead.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     entry_dir = os.path.dirname(manifest_path)
     action = manifest["action"]
     target = manifest["target_skill"]
@@ -168,10 +188,31 @@ def cmd_approve(args):
     )
 
 
+def _reset_mentions(target):
+    """Zero the mention counter for a domain that was rejected."""
+    if not target or not os.path.exists(MENTIONS_PATH):
+        return
+    try:
+        with open(MENTIONS_PATH) as f:
+            mentions = json.load(f)
+    except (json.JSONDecodeError, ValueError):
+        return
+    if target in mentions:
+        del mentions[target]
+        with open(MENTIONS_PATH, "w") as f:
+            json.dump(mentions, f, indent=2)
+
+
 def cmd_reject(args):
-    _, manifest = _load_manifest(args.id)
-    shutil.rmtree(os.path.join(PENDING_DIR, args.id))
-    print(f"rejected {args.id}: {manifest['action']} {manifest['target_skill'] or '(new)'}")
+    manifest_path, manifest = _load_manifest(args.id)
+    if manifest.get("rejected_at"):
+        print(f"pending.py reject: {args.id} already rejected at {manifest['rejected_at']}.")
+        return
+    manifest["rejected_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    _save_manifest(manifest_path, manifest)
+    _reset_mentions(manifest.get("target_skill"))
+    target = manifest["target_skill"] or "(new)"
+    print(f"rejected {args.id}: {manifest['action']} {target} — kept for history, mention counters reset")
 
 
 def main():
@@ -187,7 +228,9 @@ def main():
                         help="remove_file only: relative path (within the target skill) to remove")
     p_new.set_defaults(func=cmd_new)
 
-    sub.add_parser("list").set_defaults(func=cmd_list)
+    p_list = sub.add_parser("list")
+    p_list.add_argument("--all", action="store_true", help="Include rejected entries")
+    p_list.set_defaults(func=cmd_list)
 
     p_show = sub.add_parser("show")
     p_show.add_argument("id")

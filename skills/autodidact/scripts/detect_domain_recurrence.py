@@ -118,7 +118,11 @@ def existing_pending_id(target):
                 manifest = json.load(f)
         except (json.JSONDecodeError, ValueError):
             continue
-        if manifest.get("target_skill") == target and manifest.get("action") == "create":
+        if (
+            manifest.get("target_skill") == target
+            and manifest.get("action") == "create"
+            and not manifest.get("rejected_at")
+        ):
             return entry_id
     return None
 

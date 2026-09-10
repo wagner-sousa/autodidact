@@ -41,8 +41,9 @@ Six proposal actions, mirroring that `skill_manage` shape: `create`, `patch`, `e
   that supports this open skill spec plus Stop/UserPromptSubmit/SessionStart-equivalent
   hooks.
 - **Python 3** — all scripts and hooks (`pending.py`, `inject_reminder.py`,
-  `detect_domain_recurrence.py`, `detect_complexity.py`, `list_pending.py`,
-  `install_hooks.py`), stdlib only, no external dependencies.
+  `detect_domain_recurrence.py`, `detect_complexity.py`, `detect_pending_completion.py`,
+  `detect_staleness.py`, `list_pending.py`, `install_hooks.py`), stdlib only, no
+  external dependencies.
 
 ---
 
@@ -146,11 +147,15 @@ autodidact/
 │       ├── SKILL_CREATOR.md       # how to pair autodidact with a skill-creator
 │       ├── config.json            # scope / trigger / domain_recurrence settings
 │       └── scripts/
-│           ├── detect_complexity.py  # Stop hook
-│           ├── inject_reminder.py    # UserPromptSubmit hook
-│           ├── pending.py            # approval queue CLI
-│           ├── list_pending.py       # SessionStart hook
-│           └── README.md             # hook wiring instructions
+│           ├── detect_complexity.py         # Stop hook
+│           ├── detect_pending_completion.py # Stop hook
+│           ├── detect_staleness.py          # Stop hook
+│           ├── inject_reminder.py           # UserPromptSubmit hook
+│           ├── detect_domain_recurrence.py  # UserPromptSubmit hook
+│           ├── pending.py                   # approval queue CLI
+│           ├── list_pending.py              # SessionStart hook
+│           ├── install_hooks.py             # hook installer
+│           └── README.md                    # hook wiring instructions
 ├── commands/
 │   ├── skill-learn.md             # /skill-learn
 │   ├── skill-fork.md              # /skill-fork
@@ -212,12 +217,15 @@ step is skipped rather than blocking the proposal.
 graph TB
     Task[Agent finishes a task] --> Judge{Worth capturing?}
     Hook[Stop hook: unconditional reminder + tool-count backstop] -.reminder.-> Judge
+    Recur[UserPromptSubmit: same domain mentioned repeatedly] -.stages itself.-> Queue
+    Stale[Stop hook: skill exists but files edited, never invoked] -.stages patch.-> Queue
     Judge -- no --> Skip[Skip silently]
     Judge -- yes --> Stage[pending.py new: request only, no content]
     Stage --> Queue[(.state/pending/id — manifest.json)]
-    Queue --> Review{User approves?}
-    Review -- reject --> Discard[Discard, no trace]
-    Review -- approve --> Mechanical{delete / remove_file?}
+    Queue --> Ask[AskUserQuestion at end of task]
+    Ask -- decide later --> Queue
+    Ask -- reject --> Rejected[rejected_at stamped, kept as history, mention counter reset]
+    Ask -- approve --> Mechanical{delete / remove_file?}
     Mechanical -- yes --> Applied[Applied immediately, entry cleared]
     Mechanical -- no --> Fork[Fork subagent: skill-creator drafts, writes directly to .claude/skills/]
     Fork -.background.-> Skills[(.claude/skills/)]
