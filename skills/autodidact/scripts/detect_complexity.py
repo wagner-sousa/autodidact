@@ -1,11 +1,13 @@
 #!/usr/bin/env python
-"""Stop hook: count tool calls in the last agent turn and stage a
-skill_manage review trigger when the turn was complex enough to be worth it.
+"""Stop hook: print unconditional skill-capture reminder and conditionally
+write a complexity marker for the next turn.
 
-Reads the hook payload (JSON) from stdin. Claude Code passes at least
-`transcript_path` and `session_id` on the Stop event. Writes a marker file
-that the companion UserPromptSubmit hook (inject_reminder.sh) reads and
-consumes on the next turn.
+Always prints a reminder covering the four capture-worthy criteria (a-d),
+including cases the tool-count check can't see (user correction, dead end
+contornado, non-obvious discovery). When the turn also crosses the
+configured tool-call threshold, writes .state/pending.json so that
+inject_reminder.py injects a richer count-based nudge at the start of the
+next turn.
 """
 import json
 import os
@@ -97,6 +99,15 @@ def last_turn_tool_calls(transcript_path):
     return len(tool_names), tool_names
 
 
+REMINDER = (
+    "autodidact: ao terminar, avalie se este turno teve (a) 5+ tool calls "
+    "com sucesso, (b) um erro/beco contornado, (c) o usuario corrigindo sua "
+    "abordagem, ou (d) um fluxo nao-obvio descoberto -> proponha via "
+    "pending.py new. Prefira patch a create. Sempre enfileire, nunca "
+    "escreva direto."
+)
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -107,6 +118,11 @@ def main():
     count, tool_names = last_turn_tool_calls(transcript_path)
     edit_count = sum(1 for name in tool_names if name in EDIT_TOOLS)
     trigger = get_trigger_config()
+
+    # Unconditional: covers turns whose value isn't measured by tool-call
+    # volume (a corrected approach, a dead end worked around, a non-obvious
+    # discovery) — cases the count-based trigger below structurally can't see.
+    print(REMINDER)
 
     if not should_fire(count, edit_count, trigger):
         return

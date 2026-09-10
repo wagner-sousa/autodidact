@@ -209,7 +209,7 @@ step is skipped rather than blocking the proposal.
 ```mermaid
 graph TB
     Task[Agent finishes a task] --> Judge{Worth capturing?}
-    Hook[Stop hook: tool-count backstop] -.reminder.-> Judge
+    Hook[Stop hook: unconditional reminder + tool-count backstop] -.reminder.-> Judge
     Judge -- no --> Skip[Skip silently]
     Judge -- yes --> Guard[Skill guard: review via skill-creator]
     Guard --> Stage[pending.py new: stage proposal]
