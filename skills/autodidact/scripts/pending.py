@@ -29,7 +29,6 @@ PROJECT_SKILLS_ROOT = os.path.join(SKILL_DIR, "..")
 USER_SKILLS_ROOT = os.path.join(os.path.expanduser("~"), ".claude", "skills")
 PENDING_DIR = os.path.join(SKILL_DIR, ".state", "pending")
 CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
-SKELETON_MARKER = "TODO — auto-staged skeleton"
 
 
 def _load_config():
@@ -106,19 +105,6 @@ def cmd_new(args):
     print(entry_id)
 
 
-def _entry_is_skeleton(entry_id, manifest):
-    files_dir = os.path.join(PENDING_DIR, entry_id, "files")
-    for f in manifest.get("files", []):
-        staged = os.path.join(files_dir, f["staged_name"])
-        try:
-            with open(staged) as fh:
-                if SKELETON_MARKER in fh.read():
-                    return True
-        except OSError:
-            pass
-    return False
-
-
 def cmd_list(_args):
     if not os.path.isdir(PENDING_DIR):
         return
@@ -128,8 +114,7 @@ def cmd_list(_args):
     for entry_id in entries:
         _, manifest = _load_manifest(entry_id)
         target = manifest["target_skill"] or "(new)"
-        tag = "\t[SKELETON]" if _entry_is_skeleton(entry_id, manifest) else ""
-        print(f"{entry_id}\t{manifest['action']}\t{target}\t{manifest['summary']}{tag}")
+        print(f"{entry_id}\t{manifest['action']}\t{target}\t{manifest['summary']}")
 
 
 def cmd_show(args):
