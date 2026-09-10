@@ -62,18 +62,27 @@ python3 .claude/skills/autodidact/scripts/pending.py new --action patch --target
 
 For `remove_file`, add `--path <relative-path>` (the only case that needs a path — nothing to draft, just a removal target). `pending.py new` always queues and prints the entry id.
 
-Don't just print a one-line notice and move on — plain text is easy for the user to skim past or miss entirely, and an unattended request just sits in the queue forever. Ask for the decision with the `AskUserQuestion` tool instead, right after staging:
+After staging, read `config.json` and branch on `auto_approve`:
 
+**`auto_approve: true`** — approve immediately without asking:
+```bash
+python3 .claude/skills/autodidact/scripts/pending.py approve <id>
+```
+Then proceed directly into the drafting flow below. Tell the user in one line:
+```
+autodidact: auto-approved <action> for <skill-name> (id <id>) — generating in background.
+```
+
+**`auto_approve: false` (default)** — don't just print a notice and move on; plain text is easy to skim past. Use `AskUserQuestion` right after staging:
 ```
 question: "Stage <action> for skill '<skill-name>' (id <id>)?"
 options: ["Approve now (Recommended)", "Reject", "Decide later"]
 ```
-
 - **Approve now** → run `pending.py approve <id>` immediately and continue into the drafting flow below.
 - **Reject** → run `pending.py reject <id>`.
-- **Decide later** → leave the entry queued; it already survives restarts and resurfaces at the next `SessionStart` via `list_pending.py`, so nothing is lost.
+- **Decide later** → leave the entry queued; it survives restarts and resurfaces at the next `SessionStart` via `list_pending.py`.
 
-Only skip `AskUserQuestion` and fall back to the one-line notice when the harness has no such tool available — in that case, still print the notice, don't silently drop it:
+Only fall back to a one-line text notice when the harness has no `AskUserQuestion` tool:
 ```
 autodidact: staged <action> for <skill-name> (id <id>) — "approve <id>" / "reject <id>" whenever convenient.
 ```
@@ -121,9 +130,10 @@ To install in a project (Claude Code, OpenCode, or any agent that supports agent
 | Key | Default | Effect |
 |---|---|---|
 | `scope` | `"project"` | Where skills are written: `"project"` = `.claude/skills/` (versioned, this repo only). `"user"` = `~/.claude/skills/` (survives git clone/reset, shared across projects). Override per-proposal with `pending.py new --scope project\|user`. |
+| `auto_approve` | `false` | `true` = skip `AskUserQuestion` and approve automatically right after staging; skill-creator runs immediately in background. `false` = ask via `AskUserQuestion` before approving. |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn (see `trigger.min_file_edits`) to fire. Override with `SKILL_MANAGE_THRESHOLD` env var (overrides this key only). |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy and use the lower `min_tool_calls` bar. |
-| `trigger.readonly_threshold` | `12` | For turns with zero file edits (pure investigation), the higher tool-call bar needed to fire instead — more evidence required before proposing on a read-only turn. |
+| `trigger.readonly_threshold` | `8` | For turns with zero file edits (pure investigation), the higher tool-call bar needed to fire instead — more evidence required before proposing on a read-only turn. |
 
 ## Reference files
 

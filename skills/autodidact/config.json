@@ -1,5 +1,6 @@
 {
   "scope": "project",
+  "auto_approve": false,
   "trigger": {
     "min_tool_calls": 5,
     "min_file_edits": 2,

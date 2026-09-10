@@ -114,10 +114,11 @@ including non-Claude-Code agents.
 ```json
 {
   "scope": "project",
+  "auto_approve": false,
   "trigger": {
     "min_tool_calls": 5,
     "min_file_edits": 2,
-    "readonly_threshold": 12
+    "readonly_threshold": 8
   }
 }
 ```
@@ -125,9 +126,10 @@ including non-Claude-Code agents.
 | Key | Default | Effect |
 | --- | --- | --- |
 | `scope` | `"project"` | `"project"` = write to `.claude/skills/` (versioned, this repo only). `"user"` = write to `~/.claude/skills/` (survives clone/reset, shared across projects). |
+| `auto_approve` | `false` | `true` = skip the `AskUserQuestion` prompt and approve staged requests automatically — skill-creator drafts and writes in the background with no human in the loop. |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn to fire. |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy. |
-| `trigger.readonly_threshold` | `12` | For read-only turns, the higher tool-call bar needed to fire instead. |
+| `trigger.readonly_threshold` | `8` | For read-only turns, the higher tool-call bar needed to fire instead. |
 
 `SKILL_MANAGE_THRESHOLD` (env var) overrides `trigger.min_tool_calls` only, taking
 precedence over `config.json`.
