@@ -54,15 +54,15 @@ def _skills_root(scope_override=None):
     return USER_SKILLS_ROOT if scope == "user" else PROJECT_SKILLS_ROOT
 
 
-def _apply(action, target, files_dir, files, scope=None):
+def _apply(action, target, file_contents, files, scope=None):
     skills_root = _skills_root(scope)
     if action in ("create", "patch", "edit", "write_file"):
         base = os.path.join(skills_root, target) if target else skills_root
         for f in files:
-            staged = os.path.join(files_dir, f["staged_name"])
             dest = os.path.join(base, f["path"])
             os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copyfile(staged, dest)
+            with open(dest, "w") as fh:
+                fh.write(file_contents.get(f["path"], ""))
     elif action == "delete":
         target_path = os.path.join(skills_root, target)
         if os.path.isdir(target_path):
@@ -120,12 +120,16 @@ def _validate_skill_md(rel_path, content, target):
 
 
 def cmd_new(args):
+    file_contents = {}
     errors = []
     for spec in args.file or []:
         rel_path, staged_content_path = spec.split("=", 1)
-        if args.action not in ("delete", "remove_file") and os.path.basename(rel_path) == "SKILL.md":
+        if args.action not in ("delete", "remove_file"):
             with open(staged_content_path) as fh:
-                errors.extend(_validate_skill_md(rel_path, fh.read(), args.target))
+                content = fh.read()
+            if os.path.basename(rel_path) == "SKILL.md":
+                errors.extend(_validate_skill_md(rel_path, content, args.target))
+            file_contents[rel_path] = content
 
     if errors:
         for err in errors:
@@ -136,16 +140,10 @@ def cmd_new(args):
     os.makedirs(PENDING_DIR, exist_ok=True)
     entry_id = str(int(time.time() * 1000))
     entry_dir = os.path.join(PENDING_DIR, entry_id)
-    os.makedirs(os.path.join(entry_dir, "files"), exist_ok=True)
+    os.makedirs(entry_dir, exist_ok=True)
 
-    files = []
-    for spec in args.file or []:
-        rel_path, staged_content_path = spec.split("=", 1)
-        staged_name = rel_path.replace("/", "__")
-        dest = os.path.join(entry_dir, "files", staged_name)
-        if args.action not in ("delete", "remove_file"):
-            shutil.copyfile(staged_content_path, dest)
-        files.append({"path": rel_path, "staged_name": staged_name})
+    files = [{"path": rel_path} for spec in (args.file or [])
+             for rel_path, _ in [spec.split("=", 1)]]
 
     manifest = {
         "id": entry_id,
@@ -155,6 +153,7 @@ def cmd_new(args):
         "summary": args.summary,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "files": files,
+        "file_contents": file_contents,
     }
     with open(os.path.join(entry_dir, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
@@ -177,29 +176,28 @@ def cmd_list(_args):
 def cmd_show(args):
     _, manifest = _load_manifest(args.id)
     print(json.dumps(manifest, indent=2))
-    entry_dir = os.path.join(PENDING_DIR, args.id, "files")
+    file_contents = manifest.get("file_contents", {})
     for f in manifest["files"]:
-        staged = os.path.join(entry_dir, f["staged_name"])
-        if os.path.exists(staged):
+        content = file_contents.get(f["path"])
+        if content is not None:
             print(f"\n--- {f['path']} ---")
-            with open(staged) as fh:
-                print(fh.read())
+            print(content)
 
 
 def cmd_diff(args):
-    manifest_path, manifest = _load_manifest(args.id)
+    _, manifest = _load_manifest(args.id)
     action = manifest["action"]
     target = manifest["target_skill"]
     skills_root = _skills_root(manifest.get("scope"))
     base = os.path.join(skills_root, target) if target else skills_root
-    files_dir = os.path.join(os.path.dirname(manifest_path), "files")
+    file_contents = manifest.get("file_contents", {})
     any_diff = False
 
     for f in manifest["files"]:
-        staged = os.path.join(files_dir, f["staged_name"])
+        content = file_contents.get(f["path"])
         dest = os.path.join(base, f["path"])
 
-        staged_lines = open(staged).readlines() if os.path.exists(staged) else []
+        staged_lines = content.splitlines(keepends=True) if content is not None else []
         current_lines = open(dest).readlines() if os.path.exists(dest) else []
 
         if action == "remove_file":
@@ -249,7 +247,7 @@ def cmd_approve(args):
     if action in ("create", "patch", "edit", "write_file") and target:
         snapshot = _snapshot(base)
 
-    _apply(action, target, os.path.join(entry_dir, "files"), manifest["files"], scope)
+    _apply(action, target, manifest.get("file_contents", {}), manifest["files"], scope)
 
     errors = []
     if action in ("create", "patch", "edit", "write_file"):
