@@ -7,8 +7,8 @@ tracks per-domain mention counts in .state/domain_mentions.json.
 
 When a domain accumulates >= min_mentions without a corresponding skill directory,
 auto-stages a create proposal (skeleton SKILL.md) via pending.py and emits a
-reminder pointing to that entry. If auto_stage is false in config, only emits
-the reminder without staging.
+reminder pointing to that entry. Always queued — pending.py never applies
+without an explicit approve.
 
 Fires on every mention once the domain has reached min_mentions (insistent, not
 just at multiples) until the skill is created. When a skill is detected, resets
@@ -162,7 +162,7 @@ def already_staged(domain):
     return False, None
 
 
-def auto_stage(domain, count):
+def stage_proposal(domain, count):
     """Stage a skeleton create proposal for domain. Returns entry_id or None on error."""
     content = SKELETON_TEMPLATE.format(
         name=domain,
@@ -235,16 +235,15 @@ def main():
     for domain, count in to_remind:
         staged, entry_id = already_staged(domain)
         if not staged:
-            entry_id = auto_stage(domain, count)
+            entry_id = stage_proposal(domain, count)
             staged = entry_id is not None
 
         if staged:
             print(
                 "autodidact: '{}' mentioned {} time(s) with no skill — auto-staged "
-                "proposal {} (skeleton, needs real content). Replace the placeholder "
-                "before approving: pending.py show {}; config.json's root "
-                "\"auto_stage\" still gates whether this queues for approval or "
-                "applies immediately.".format(domain, count, entry_id, entry_id)
+                "proposal {} (skeleton, needs real content) in the pending queue. "
+                "Replace the placeholder before approving: "
+                "pending.py show {}".format(domain, count, entry_id, entry_id)
             )
         else:
             print(

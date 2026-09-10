@@ -4,7 +4,7 @@
 [![agentskills.io](https://img.shields.io/badge/agentskills.io-compatible-FF6B35?style=for-the-badge&logo=bookstack&logoColor=white)](https://agentskills.io)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
-> A procedural-memory self-improvement loop for any [agentskills.io](https://agentskills.io)-compatible AI coding agent, modeled on a `skill_manage`-style tool and its `auto_stage` gate.
+> A procedural-memory self-improvement loop for any [agentskills.io](https://agentskills.io)-compatible AI coding agent, modeled on a `skill_manage`-style tool and its async approval queue.
 
 ---
 
@@ -113,7 +113,6 @@ including non-Claude-Code agents.
 
 ```json
 {
-  "auto_stage": true,
   "scope": "project",
   "trigger": {
     "min_tool_calls": 5,
@@ -125,7 +124,6 @@ including non-Claude-Code agents.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `auto_stage` | `true` | `true` = stage proposals in the async queue. `false` = apply immediately, no queue — trusted/single-user setups only. |
 | `scope` | `"project"` | `"project"` = write to `.claude/skills/` (versioned, this repo only). `"user"` = write to `~/.claude/skills/` (survives clone/reset, shared across projects). |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn to fire. |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy. |
@@ -144,7 +142,7 @@ autodidact/
 │   └── autodidact/
 │       ├── SKILL.md               # the loop: when it fires, how to propose/approve
 │       ├── SKILL_CREATOR.md       # how to pair autodidact with a skill-creator
-│       ├── config.json            # auto_stage / scope / trigger thresholds
+│       ├── config.json            # scope / trigger / domain_recurrence settings
 │       └── scripts/
 │           ├── detect_complexity.py  # Stop hook
 │           ├── inject_reminder.py    # UserPromptSubmit hook
@@ -216,9 +214,8 @@ graph TB
     Judge -- yes --> Guard[Skill guard: review via skill-creator]
     Guard --> Stage[pending.py new: stage proposal]
     Stage --> Queue[(.state/pending/id)]
-    Queue -- auto_stage=false --> Apply[Apply immediately]
-    Queue -- auto_stage=true --> Review{User approves?}
-    Review -- approve <id> --> Apply
+    Queue --> Review{User approves?}
+    Review -- approve <id> --> Apply[Apply to skills dir]
     Review -- reject <id> --> Discard[Discard, no trace]
     Apply --> Skills[(.claude/skills/)]
 ```

@@ -1,5 +1,4 @@
 {
-  "auto_stage": true,
   "scope": "project",
   "trigger": {
     "min_tool_calls": 5,

@@ -3,11 +3,8 @@
 
 Instead of asking for a yes/no in the same turn, a proposal is staged as a
 pending entry that survives restarts. The user reviews and approves/rejects
-whenever they want, in a later session if needed.
-
-Controlled by config.json's "auto_stage" (root):
-  true  (default) — proposals are queued in .state/pending/ until approved.
-  false           — proposals are applied immediately, skipping the queue.
+whenever they want, in a later session if needed. Every proposal is queued —
+nothing is ever written to .claude/skills/ without an explicit approve.
 
 Usage:
   pending.py new --action create|patch|edit|delete|write_file|remove_file \
@@ -40,10 +37,6 @@ def _load_config():
         return {}
     with open(CONFIG_PATH) as f:
         return json.load(f)
-
-
-def _auto_stage_enabled():
-    return _load_config().get("auto_stage", True)
 
 
 def _skills_root(scope_override=None):
@@ -97,12 +90,6 @@ def cmd_new(args):
         if args.action not in ("delete", "remove_file"):
             shutil.copyfile(staged_content_path, dest)
         files.append({"path": rel_path, "staged_name": staged_name})
-
-    if not _auto_stage_enabled():
-        _apply(args.action, args.target or None, os.path.join(entry_dir, "files"), files, args.scope)
-        shutil.rmtree(entry_dir)
-        print(f"applied (auto_stage=false, scope={args.scope or _load_config().get('scope', 'project')}): {args.action} {args.target or '(new)'}")
-        return
 
     manifest = {
         "id": entry_id,
