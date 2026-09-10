@@ -43,48 +43,17 @@ DEFAULT_CONFIG = {
 }
 
 
-def get_integration_dir():
-    """Walk up from the skill dir to find the project's Integration directory.
-
-    Assumes standard layout: <project>/.claude/skills/autodidact/
-    Resolves to: <project>/src/Uoou/Component/Integration/ when present.
-    Override by setting known_domains in config.json.
-    """
-    candidate = os.path.normpath(
-        os.path.join(SKILL_DIR, "..", "..", "..", "src", "Uoou", "Component", "Integration")
-    )
-    return candidate if os.path.isdir(candidate) else None
-
-
-def split_camel_case(name):
-    """Split a CamelCase name into lowercase words (AzulCargo -> ['azul', 'cargo'])."""
-    words = re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+", name)
-    return [w.lower() for w in words if w]
-
-
 def get_known_domains(config):
-    """Return {search_pattern: skill_dir_name} from Integration dir + config list.
+    """Return {search_pattern: skill_dir_name} from config's known_domains list.
 
-    Integration dir: subdir names have version suffixes stripped (e.g. BlingV3 ->
-    bling, Correios -> correios), then are split on CamelCase word boundaries so
-    the regex matches the name whether written solid, spaced, or hyphenated
-    (AzulCargo -> matches "azulcargo", "azul cargo", "azul-cargo"). The resulting
-    skill_dir_name is kebab-case (AzulCargo -> azul-cargo).
-
-    Config known_domains accepts a list of strings or {term: skill_name} dicts
-    for domains not discoverable from the Integration dir.
+    Accepts plain strings ("mercadopago" -> matches/stages as "mercadopago")
+    or {term: skill_name} dicts for when the spoken term differs from the
+    skill's directory name ({"nota fiscal": "fiscal"}). No filesystem
+    scanning of any kind — the plugin ships with zero project-specific
+    paths, so every domain this hook can ever watch has to be named
+    explicitly in config.json.
     """
     domains = {}
-
-    integration_dir = get_integration_dir()
-    if integration_dir:
-        for entry in os.listdir(integration_dir):
-            if os.path.isdir(os.path.join(integration_dir, entry)):
-                name = re.sub(r"[Vv]\d+$", "", entry)
-                words = split_camel_case(name)
-                if words:
-                    pattern = r"[\s-]*".join(re.escape(w) for w in words)
-                    domains[pattern] = "-".join(words)
 
     for item in config.get("known_domains", []):
         if isinstance(item, str):
