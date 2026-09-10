@@ -14,7 +14,7 @@ Three paths, and all are valid — this mirrors that pattern: the trigger is the
 
 1. **Your own judgment (primary).** At the natural end of any task, ask yourself the questions below regardless of whether a hook fired. A workflow can be worth capturing after 2 tool calls (a genuinely tricky one-liner) or not worth it after 15 (repetitive, uninteresting). Don't wait for permission to evaluate.
 2. **The Stop hook nudge (backstop, cheap and dumb on purpose).** `scripts/detect_complexity.py` runs on every turn. It unconditionally prints a reminder covering four capture-worthy criteria: (a) 5+ tool calls that succeeded, (b) an error or dead end you worked around, (c) the user correcting your approach, or (d) a non-obvious flow you discovered. (b)-(d) can happen in one or two tool calls — no tool-count threshold would ever catch them, so the reminder fires every turn regardless of volume. Separately, it also counts `tool_use` blocks and, past the configured threshold, writes a marker so `inject_reminder.py` injects a richer count-based nudge at the start of the next turn. Neither path is a substitute for judgment — crossing a threshold, or a turn ending at all, does not mean you must propose something.
-3. **The domain-recurrence nudge (stages the request itself).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. It never generates skill content — that stays skill-creator's job — but once a domain hits `min_mentions` it calls `pending.py new --action create --target <domain>` itself (staging a manifest is content-free and safe to do without confirmation) and prints an instruction telling the agent to use `AskUserQuestion` right away on the resulting id. A printed-only reminder is too easy to miss across a whole new session; an already-staged, already-numbered request is not. It fires on every subsequent mention (not just the first, and reusing the same pending id) until the skill directory exists.
+3. **The domain-recurrence nudge (stages the request itself).** `scripts/detect_domain_recurrence.py` watches for the same uncovered domain coming up repeatedly across separate prompts — a pattern `detect_complexity.py` misses because no single turn crosses its tool-call bar. It never generates skill content — that stays skill-creator's job — but once a domain hits `min_mentions` it calls `pending.py new --action create --target <domain>` itself (staging a manifest is content-free and safe to do without confirmation) and prints an instruction telling the agent to use `AskUserQuestion` on the resulting id at the end of the current task, not mid-task. A printed-only reminder is too easy to miss across a whole new session; an already-staged, already-numbered request is not. It fires on every subsequent mention (not just the first, reusing the same pending id) until the skill directory exists — so a "decide later" answer just means the next mention asks again.
 
 ## Evaluation checklist
 
@@ -73,14 +73,14 @@ Then proceed directly into the drafting flow below. Tell the user in one line:
 autodidact: auto-approved <action> for <skill-name> (id <id>) — generating in background.
 ```
 
-**`auto_approve: false` (default)** — don't just print a notice and move on; plain text is easy to skim past. Use `AskUserQuestion` right after staging:
+**`auto_approve: false` (default)** — at the **end of the current task/response** (never mid-task; finish what the user asked first), use `AskUserQuestion`:
 ```
 question: "Stage <action> for skill '<skill-name>' (id <id>)?"
 options: ["Approve now (Recommended)", "Reject", "Decide later"]
 ```
 - **Approve now** → run `pending.py approve <id>` immediately and continue into the drafting flow below.
 - **Reject** → run `pending.py reject <id>`.
-- **Decide later** → leave the entry queued; it survives restarts and resurfaces at the next `SessionStart` via `list_pending.py`.
+- **Decide later** → leave the entry queued as-is. The user will be asked again: at `SessionStart` via `list_pending.py`, and on every subsequent prompt that mentions the same domain (the domain-recurrence hook reuses the pending id and re-asks at the end of each such turn).
 
 Only fall back to a one-line text notice when the harness has no `AskUserQuestion` tool:
 ```

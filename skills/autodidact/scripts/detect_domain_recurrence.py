@@ -221,10 +221,12 @@ def main():
         if entry_id:
             print(
                 "autodidact: '{}' mentioned {} time(s) with no skill — a create request "
-                "is queued (id {}). Use AskUserQuestion NOW to ask the user: approve "
-                "(then invoke skill-creator to draft it directly under "
-                ".claude/skills/{}/), reject, or decide later. Don't just print this "
-                "as a passive notice.".format(domain, count, entry_id, domain)
+                "is queued (id {}). At the END of your current task/response, use "
+                "AskUserQuestion to ask: approve (then invoke skill-creator to draft it "
+                "directly under .claude/skills/{}/), reject, or decide later. If the "
+                "user picks 'decide later', this request will surface again on the next "
+                "mention of '{}'. Don't ask mid-task; finish what the user asked "
+                "first.".format(domain, count, entry_id, domain, domain)
             )
         else:
             print(
