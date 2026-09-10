@@ -60,7 +60,20 @@ Read the current skill index before deciding: list `.claude/skills/` and skim th
 python3 .claude/skills/autodidact/scripts/pending.py new --action patch --target <skill-name>
 ```
 
-For `remove_file`, add `--path <relative-path>` (the only case that needs a path — nothing to draft, just a removal target). `pending.py new` always queues and prints the entry id. Tell the user, in one line, that a request was staged and how to act on it — don't wait for a reply before moving on:
+For `remove_file`, add `--path <relative-path>` (the only case that needs a path — nothing to draft, just a removal target). `pending.py new` always queues and prints the entry id.
+
+Don't just print a one-line notice and move on — plain text is easy for the user to skim past or miss entirely, and an unattended request just sits in the queue forever. Ask for the decision with the `AskUserQuestion` tool instead, right after staging:
+
+```
+question: "Stage <action> for skill '<skill-name>' (id <id>)?"
+options: ["Approve now (Recommended)", "Reject", "Decide later"]
+```
+
+- **Approve now** → run `pending.py approve <id>` immediately and continue into the drafting flow below.
+- **Reject** → run `pending.py reject <id>`.
+- **Decide later** → leave the entry queued; it already survives restarts and resurfaces at the next `SessionStart` via `list_pending.py`, so nothing is lost.
+
+Only skip `AskUserQuestion` and fall back to the one-line notice when the harness has no such tool available — in that case, still print the notice, don't silently drop it:
 ```
 autodidact: staged <action> for <skill-name> (id <id>) — "approve <id>" / "reject <id>" whenever convenient.
 ```
