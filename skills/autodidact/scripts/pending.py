@@ -6,6 +6,11 @@ pending entry that survives restarts. The user reviews and approves/rejects
 whenever they want, in a later session if needed. Every proposal is queued —
 nothing is ever written to .claude/skills/ without an explicit approve.
 
+approve re-validates the applied SKILL.md files against the same structural
+checks new() runs, and rolls back to the pre-apply snapshot (or deletes a
+newly-created dir) if anything comes out malformed — the entry stays queued
+for a fix and re-approve instead of leaving a broken skill on disk.
+
 Usage:
   pending.py new --action create|patch|edit|delete|write_file|remove_file \
                   --target <skill-name-or-empty> --summary "..." \
@@ -24,6 +29,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -211,13 +217,62 @@ def cmd_diff(args):
         print(f"no changes (staged matches current or files are new with identical content)")
 
 
+def _snapshot(path):
+    """Back up path to a tempdir before applying. Returns the tempdir, or None
+    if path doesn't exist yet (nothing to restore, just delete on rollback)."""
+    if not os.path.isdir(path):
+        return None
+    snap = tempfile.mkdtemp(prefix="autodidact-snap-")
+    shutil.copytree(path, os.path.join(snap, "content"))
+    return snap
+
+
+def _restore(target_path, snapshot):
+    """Revert target_path to snapshot's content, discarding the snapshot dir."""
+    if os.path.isdir(target_path):
+        shutil.rmtree(target_path)
+    if snapshot:
+        shutil.move(os.path.join(snapshot, "content"), target_path)
+        shutil.rmtree(snapshot, ignore_errors=True)
+
+
 def cmd_approve(args):
     manifest_path, manifest = _load_manifest(args.id)
     entry_dir = os.path.dirname(manifest_path)
     action = manifest["action"]
     target = manifest["target_skill"]
+    scope = manifest.get("scope")
+    skills_root = _skills_root(scope)
+    base = os.path.join(skills_root, target) if target else skills_root
 
-    _apply(action, target, os.path.join(entry_dir, "files"), manifest["files"], manifest.get("scope"))
+    snapshot = None
+    if action in ("create", "patch", "edit", "write_file") and target:
+        snapshot = _snapshot(base)
+
+    _apply(action, target, os.path.join(entry_dir, "files"), manifest["files"], scope)
+
+    errors = []
+    if action in ("create", "patch", "edit", "write_file"):
+        for f in manifest["files"]:
+            if os.path.basename(f["path"]) == "SKILL.md":
+                dest = os.path.join(base, f["path"])
+                if os.path.exists(dest):
+                    with open(dest) as fh:
+                        errors.extend(_validate_skill_md(f["path"], fh.read(), target))
+
+    if errors:
+        _restore(base, snapshot)
+        for err in errors:
+            print(f"pending.py approve: {err}", file=sys.stderr)
+        print(
+            f"pending.py approve: post-apply validation failed, rolled back — "
+            f"entry {args.id} stays in the queue for a fix and re-approve.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if snapshot:
+        shutil.rmtree(snapshot, ignore_errors=True)
     shutil.rmtree(entry_dir)
     print(f"approved {args.id}: {action} {target or '(new)'}")
 

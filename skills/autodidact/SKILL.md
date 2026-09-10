@@ -52,19 +52,30 @@ Does any existing skill own this topic?
 
 Read the current skill index before deciding: list `.claude/skills/` and skim the descriptions.
 
-## Skill guard
+## Drafting and guarding (background fork)
 
-Before staging any `create`, `patch`, or `edit` proposal, run the drafted `SKILL.md` content past a `skill-creator` skill for a structural review — this is our stand-in for that kind of guard, which snapshots and reverts malformed skills. See [SKILL_CREATOR.md](SKILL_CREATOR.md) for how to get a `skill-creator` skill (fork Anthropic's or OpenAI's implementation) into your project. Because `skill-creator` is typically an interactive draft→test→review flow, not a headless validator, invoke it through a subagent instead of inline:
+Drafting a skill (invoking `skill-creator`'s interactive draft→test→review flow) and guarding it structurally both belong off the main conversation — they're noisy (exploration, iteration) and the main session shouldn't block on them. Use a **fork** (Claude Code's `Agent` tool with `subagent_type: "fork"`, or your agent's equivalent background-with-shared-context mechanism): it inherits full context, runs in the background, and keeps its tool output out of the main session — you keep working while it drafts, guards, and stages.
 
-1. Write the drafted `SKILL.md` (and any reference files) to a temp path — same content you're about to stage.
-2. Launch a subagent (a fresh general-purpose one — Claude Code's `Agent` tool, or your agent's equivalent spawn mechanism) with a self-contained prompt: review the temp files against your `skill-creator`'s conventions (language, frontmatter shape, description quality/triggers, no orphaned references, scope/size sanity). Ask it to report pass/fail plus concrete fixes, not to rewrite the skill itself.
-3. If the guard reports problems, fix the temp files before staging. If it passes (or the subagent errors out — don't block on infra flakiness), proceed to staging below.
+See [SKILL_CREATOR.md](SKILL_CREATOR.md) for how to get a `skill-creator` skill (fork Anthropic's or OpenAI's implementation) into your project.
 
-Skip the guard only for `delete`/`remove_file` (nothing to validate) and for trivial `write_file` additions (e.g. a reference doc, not `SKILL.md` itself). If your project has no `skill-creator` skill installed, skip the guard entirely rather than blocking the proposal.
+1. Launch a fork with a directive like:
+   ```
+   Draft and stage a skill for <target>:
+   1. Invoke skill-creator to draft SKILL.md for this domain (or patch the existing one).
+   2. Structurally validate: frontmatter complete, name matches target, description non-empty, no orphaned references.
+   3. If valid: pending.py new --action <action> --target <target> --summary "..." \
+        --file "SKILL.md=<temp_path>" (repeat --file for extra reference files).
+   4. SendMessage("main", "autodidact: staged <action> for <target> (id <id>) — approve/reject whenever ready.")
+   5. If invalid: SendMessage("main", "autodidact: draft failed guard for <target> — <concrete errors>. Needs manual fix before staging.")
+   ```
+2. Don't wait for the fork — continue your own turn. `pending.py new` still runs its own structural validation (frontmatter, `name`/target match) and refuses to stage on error, so a bad draft never reaches the queue; the fork's `SendMessage` in step 5 covers that failure case for you.
+3. When the fork's message arrives, relay it to the user in one line if you're still in the same session — otherwise it's already queued and `list_pending.py` will surface it at the next `SessionStart`.
+
+Skip forking (and the guard) only for `delete`/`remove_file` (nothing to draft) and for trivial `write_file` additions (e.g. a reference doc, not `SKILL.md` itself) — stage those directly with `pending.py new`, no drafting needed. If your project has no `skill-creator` skill installed, skip drafting/guarding entirely and stage a hand-written `SKILL.md` yourself rather than blocking the proposal.
 
 ## Proposal format
 
-Stage a pending entry instead of writing directly and instead of blocking the turn on a yes/no — this is the async approval queue pattern, not a synchronous prompt. Write the proposed content to a temp file, then stage it:
+Every proposal — whether staged directly by you or by a fork — goes through `pending.py new`, never a direct write. It always queues and never blocks the turn on a yes/no:
 
 ```bash
 python3 .claude/skills/autodidact/scripts/pending.py new \
