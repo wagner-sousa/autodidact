@@ -42,8 +42,7 @@ Six proposal actions, mirroring that `skill_manage` shape: `create`, `patch`, `e
   hooks.
 - **Python 3** — all scripts and hooks (`pending.py`, `inject_reminder.py`,
   `detect_domain_recurrence.py`, `detect_complexity.py`, `detect_pending_completion.py`,
-  `detect_staleness.py`, `list_pending.py`, `install_hooks.py`), stdlib only, no
-  external dependencies.
+  `detect_staleness.py`, `list_pending.py`), stdlib only, no external dependencies.
 
 ---
 
@@ -68,43 +67,24 @@ git clone https://github.com/wagner-sousa/autodidact.git
 cd autodidact
 ```
 
-### Copy the plugin into your project
+### Install as a Claude Code plugin
 
-Paths below use Claude Code's layout as the example — swap `.claude/` for your
-agent's own skills/commands directory if it differs.
+The repository is a Claude Code plugin and marketplace. Install it from the local
+checkout:
 
-```bash
-cp -r skills/autodidact <your-project>/.claude/skills/
-cp commands/*.md <your-project>/.claude/commands/
+```text
+/plugin marketplace add /path/to/autodidact
+/plugin install autodidact@autodidact-marketplace
 ```
 
-### Wire the hooks
+Claude Code loads `hooks/hooks.json` automatically. No hook installer or manual
+copying is required. The plugin keeps its runtime state under the active project's
+`.claude/skills/autodidact/.state/` directory.
 
-The fastest way is the install script — it is idempotent, detects existing hooks by
-script filename, and handles both relative and absolute command paths:
+For other agents, copy `skills/autodidact/` and merge `hooks/hooks.json` according
+to that agent's plugin/hook convention.
 
-```bash
-# Project-level (.claude/settings.json)
-python3 .claude/skills/autodidact/scripts/install_hooks.py
-
-# User-level (~/.claude/settings.json) — hooks use absolute paths so they work
-# in any project
-python3 .claude/skills/autodidact/scripts/install_hooks.py --user
-
-# Dry-run: check status without writing
-python3 .claude/skills/autodidact/scripts/install_hooks.py --check
-```
-
-Alternatively, `hooks/hooks.json` contains the ready-to-use
-Stop/UserPromptSubmit/SessionStart block you can merge manually:
-
-```bash
-cp hooks/hooks.json <your-project>/.claude/hooks.json
-# then merge the "hooks" key into .claude/settings.json
-```
-
-See `skills/autodidact/README.md` for the full explanation of each hook,
-including non-Claude-Code agents.
+See `skills/autodidact/README.md` for the full explanation of each hook.
 
 ---
 
@@ -115,7 +95,10 @@ including non-Claude-Code agents.
 ```json
 {
   "scope": "project",
-  "auto_approve": false,
+  "auto_approve": true,
+  "auto_create": true,
+  "notify_on_create": true,
+  "auto_create_actions": ["create", "patch", "edit", "write_file"],
   "trigger": {
     "min_tool_calls": 5,
     "min_file_edits": 2,
@@ -127,7 +110,10 @@ including non-Claude-Code agents.
 | Key | Default | Effect |
 | --- | --- | --- |
 | `scope` | `"project"` | `"project"` = write to `.claude/skills/` (versioned, this repo only). `"user"` = write to `~/.claude/skills/` (survives clone/reset, shared across projects). |
-| `auto_approve` | `false` | `true` = skip the `AskUserQuestion` prompt and approve staged requests automatically — skill-creator drafts and writes in the background with no human in the loop. |
+| `auto_approve` | `true` | Legacy approval switch; generated requests are approved automatically when enabled. |
+| `auto_create` | `true` | Automatically starts skill creation/update for generated actions. |
+| `notify_on_create` | `true` | Prints a completion notice after a skill is created or updated. |
+| `auto_create_actions` | `create`, `patch`, `edit`, `write_file` | Actions eligible for automatic creation/update. Destructive actions still require explicit approval. |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn to fire. |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy. |
 | `trigger.readonly_threshold` | `8` | For read-only turns, the higher tool-call bar needed to fire instead. |
@@ -154,14 +140,16 @@ autodidact/
 │           ├── detect_domain_recurrence.py  # UserPromptSubmit hook
 │           ├── pending.py                   # approval queue CLI
 │           ├── list_pending.py              # SessionStart hook
-│           ├── install_hooks.py             # hook installer
 │           └── README.md                    # hook wiring instructions
+├── .claude-plugin/
+│   ├── plugin.json                          # plugin manifest
+│   └── marketplace.json                      # marketplace manifest
 ├── commands/
 │   ├── skill-learn.md             # /skill-learn
 │   ├── skill-fork.md              # /skill-fork
 │   └── skills-curator.md          # /skills-curator
 ├── hooks/
-│   └── hooks.json                 # ready-to-merge Stop/UserPromptSubmit/SessionStart block
+│   └── hooks.json                 # automatically loaded by Claude Code
 ├── LICENSE
 └── README.md
 ```
