@@ -1,0 +1,17 @@
+{
+  "name": "autodidact-marketplace",
+  "owner": {
+    "name": "Wagner Sousa"
+  },
+  "metadata": {
+    "description": "Plugins para aprendizado procedural e manutenção automática de skills no Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "autodidact",
+      "source": ".",
+      "description": "Cria e atualiza skills reutilizáveis a partir das tarefas concluídas.",
+      "version": "1.0.0"
+    }
+  ]
+}

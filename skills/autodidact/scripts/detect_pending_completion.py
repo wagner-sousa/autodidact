@@ -95,8 +95,9 @@ def main():
             shutil.rmtree(os.path.join(PENDING_DIR, entry_id), ignore_errors=True)
             cleared.append((entry_id, manifest["action"], target))
 
-    for entry_id, action, target in cleared:
-        print(f"autodidact: pending {entry_id} ({action} {target}) cleared — skill-creator finished.")
+    if _load_config().get("notify_on_create", True):
+        for entry_id, action, target in cleared:
+            print(f"autodidact: skill {target} {action} criada/atualizada automaticamente.")
 
 
 if __name__ == "__main__":

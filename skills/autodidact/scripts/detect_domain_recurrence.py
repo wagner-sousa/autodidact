@@ -37,33 +37,39 @@ PENDING_DIR = os.path.join(STATE_DIR, "pending")
 PENDING_SCRIPT = os.path.join(SCRIPT_DIR, "pending.py")
 SKILLS_ROOT = os.path.join(SKILL_DIR, "..")
 
+STOPWORDS = {
+    "a", "agora", "ainda", "ajuda", "ali", "and", "antes", "ao", "aonde", "aos", "aqui", "aquilo", "are", "arquivo", "as", "ate", "atualmente", "cada", "codigo", "coesao", "com", "como", "criar", "cuja", "cujo", "da", "dar", "das", "de", "depois", "dizer", "do", "dos", "e", "ela", "elas", "ele", "eles", "em", "entao", "essa", "esse", "esta", "estar", "este", "fala", "falando", "falar", "fazer", "foi", "foobar", "fooservice", "for", "from", "has", "have", "hello", "hoje", "integra", "integracao", "integrar", "interna", "isso", "ja", "lhe", "mais", "mas", "mesma", "mesmo", "meu", "meus", "minha", "muito", "na", "nas", "no", "nos", "nova", "novamente", "novas", "novo", "o", "onde", "ontem", "os", "ou", "outra", "outras", "outro", "outros", "para", "por", "pouco", "precisa", "precisamos", "preciso", "product", "projeto", "quais", "qual", "quando", "quanto", "quantos", "que", "quem", "queremos", "quero", "sao", "se", "ser", "service", "skill", "so", "sobre", "tambem", "tarefa", "task", "tem", "ter", "test", "teste", "that", "the", "this", "toda", "todas", "todo", "todos", "um", "uma", "usar", "vamos", "ver", "voc", "voce", "voces", "vos", "was", "with", "world",
+}
+
 DEFAULT_CONFIG = {
     "min_mentions": 3,
-    "known_domains": [],
+    "excluded_domains": [],
 }
 
 
-def get_known_domains(config):
-    """Return {search_pattern: skill_dir_name} from config's known_domains list.
+def get_excluded_domains(config):
+    vals = set()
+    for v in config.get("excluded_domains", []):
+        if isinstance(v, str):
+            vals.add(v.lower())
+        elif isinstance(v, dict):
+            vals.update(str(x).lower() for x in v.values())
+    return vals
 
-    Accepts plain strings ("mercadopago" -> matches/stages as "mercadopago")
-    or {term: skill_name} dicts for when the spoken term differs from the
-    skill's directory name ({"nota fiscal": "fiscal"}). No filesystem
-    scanning of any kind — the plugin ships with zero project-specific
-    paths, so every domain this hook can ever watch has to be named
-    explicitly in config.json.
-    """
-    domains = {}
-
-    for item in config.get("known_domains", []):
-        if isinstance(item, str):
-            domains[re.escape(item.lower())] = item.lower()
-        elif isinstance(item, dict):
-            for term, skill_name in item.items():
-                domains[re.escape(str(term).lower())] = str(skill_name).lower()
-
-    return domains
-
+def extract_candidates(prompt_text):
+    import re as _re
+    # Hook payload may include injected context, pasted data, or code. Only
+    # inspect the user's plain text and terms named as an integration/domain.
+    text = _re.sub(r"<system-reminder.*?</system-reminder>|<pasted_content[^>]*>.*?</pasted_content>|```.*?```", " ", prompt_text, flags=_re.DOTALL | _re.IGNORECASE)
+    text = _re.sub(r"\[[^\]]*compressed[^\]]*\]", " ", text, flags=_re.IGNORECASE)
+    matches = []
+    patterns = (
+        r"(?:integrar|integração|integracao|usar|conectar|conexão|conexao|sobre|skill|api)\s+(?:com\s+)?([a-z0-9]+(?:-[a-z0-9]+)*)",
+        r"\b([a-z0-9]+(?:-[a-z0-9]+)*)\s+(?:api|integração|integracao|skill)\b",
+    )
+    for pattern in patterns:
+        matches.extend(_re.findall(pattern, text.lower()))
+    return [t for t in dict.fromkeys(matches) if len(t) >= 4 and t not in STOPWORDS and not t.isdigit() and not _re.match(r"^(cu-|d\d+$)", t)]
 
 def skill_exists(skill_name):
     path = os.path.normpath(os.path.join(SKILLS_ROOT, skill_name))
@@ -139,76 +145,77 @@ def get_config():
     return cfg
 
 
-def detect_domains(prompt_text, known_domains):
-    """Return set of skill_dir_names referenced in prompt_text."""
-    found = set()
-    prompt_lower = prompt_text.lower()
-    for pattern, skill_name in known_domains.items():
-        if re.search(r"(?<![a-z])" + pattern + r"(?![a-z])", prompt_lower):
-            found.add(skill_name)
-    return found
-
 
 def main():
     try:
         payload = json.load(sys.stdin)
     except Exception:
         payload = {}
-
     prompt_text = payload.get("prompt", "")
     if not prompt_text:
         return
-
     config = get_config()
     min_mentions = int(config.get("min_mentions", DEFAULT_CONFIG["min_mentions"]))
-    known_domains = get_known_domains(config)
-
-    if not known_domains:
+    excluded = get_excluded_domains(config)
+    candidates = extract_candidates(prompt_text)
+    if not candidates:
         return
-
-    detected = detect_domains(prompt_text, known_domains)
-    if not detected:
-        return
-
+    # deduplicate while preserving order
+    seen = set()
+    uniq = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            uniq.append(c)
     mentions = load_mentions()
-    to_remind = []
-
-    for domain in detected:
-        if skill_exists(domain):
-            mentions.pop(domain, None)
+    for domain in uniq:
+        if domain in excluded:
             continue
-
-        count = mentions.get(domain, 0) + 1
-        mentions[domain] = count
-
-        if count >= min_mentions:
-            to_remind.append((domain, count))
-
-    save_mentions(mentions)
-
-    for domain, count in to_remind:
-        entry_id = existing_pending_id(domain)
-        if entry_id is None:
-            entry_id = stage_request(domain)
-
-        if entry_id:
+        if skill_exists(domain):
+            # skill already exists — don't track
+            if domain in mentions:
+                del mentions[domain]
+            continue
+        mentions[domain] = mentions.get(domain, 0) + 1
+        count = mentions[domain]
+        if count < min_mentions:
+            continue
+        existing = existing_pending_id(domain)
+        if existing:
+            # reuse pending — just remind
+            save_mentions(mentions)
             print(
-                "autodidact: '{}' mentioned {} time(s) with no skill — a create request "
-                "is queued (id {}). At the END of your current task/response, use "
-                "AskUserQuestion to ask: approve (then invoke skill-creator to draft it "
-                "directly under .claude/skills/{}/), reject, or decide later. If the "
-                "user picks 'decide later', this request will surface again on the next "
-                "mention of '{}'. Don't ask mid-task; finish what the user asked "
-                "first.".format(domain, count, entry_id, domain, domain)
+                "autodidact: '{}' mentioned {} time(s) with no skill — request {} queued. "
+                "Ask approval at task end, then invoke skill-creator."
+                .format(domain, count, existing)
             )
+            continue
+        entry_id = stage_request(domain)
+        save_mentions(mentions)
+        if entry_id:
+            config2 = get_config()
+            if config2.get("auto_approve"):
+                print(
+                    "autodidact: '{}' mentioned {} time(s); create request {} auto-approved. "
+                    "Invoke skill-creator after the current task; write .claude/skills/{}/."
+                    .format(domain, count, entry_id, domain)
+                )
+            else:
+                print(
+                    "autodidact: '{}' mentioned {} time(s) with no skill — request {} queued. "
+                    "Ask approval at task end, then invoke skill-creator."
+                    .format(domain, count, entry_id)
+                )
         else:
+            save_mentions(mentions)
             print(
                 "autodidact: '{}' mentioned {} time(s) with no skill and staging failed "
                 "(pending.py new errored) — run 'python3 .claude/skills/autodidact/scripts/"
                 "pending.py new --action create --target {}' yourself and ask the user "
                 "to approve.".format(domain, count, domain)
             )
-
+            continue
+    save_mentions(mentions)
 
 if __name__ == "__main__":
     main()

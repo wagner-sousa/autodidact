@@ -1,13 +1,15 @@
 {
   "scope": "project",
-  "auto_approve": false,
+  "auto_approve": true,
+  "auto_create": true,
+  "notify_on_create": true,
+  "auto_create_actions": ["create", "patch", "edit", "write_file"],
   "trigger": {
     "min_tool_calls": 5,
     "min_file_edits": 2,
     "readonly_threshold": 8
   },
   "domain_recurrence": {
-    "min_mentions": 3,
-    "known_domains": []
+    "min_mentions": 3
   }
 }

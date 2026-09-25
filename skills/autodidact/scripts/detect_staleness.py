@@ -9,7 +9,7 @@ payload) and collects, across every turn (not just the last one):
   - which files were edited (Edit/Write/NotebookEdit tool_use blocks)
 
 Edited file paths are mapped to known domains using the same auto-discovery
-as detect_domain_recurrence.py (Integration dir + config known_domains). If a
+as detect_domain_recurrence.py (auto-discovery; no config needed). If a
 domain has files edited this session, has an existing skill directory, but
 that skill was never invoked via the Skill tool, this script stages a patch
 request (pending.py new --action patch --target <domain>) and instructs the
@@ -35,7 +35,7 @@ SKILLS_ROOT = os.path.join(SKILL_DIR, "..")
 
 sys.path.insert(0, SCRIPT_DIR)
 from detect_domain_recurrence import (  # noqa: E402
-    get_known_domains,
+    get_excluded_domains,
     skill_exists,
 )
 
@@ -153,15 +153,17 @@ def main():
 
     transcript_path = payload.get("transcript_path")
     config = get_config()
-    known_domains = get_known_domains(config)
-    if not known_domains:
-        return
+    excluded = get_excluded_domains(config)
 
     invoked_skills, edited_paths = session_activity(transcript_path)
     if not edited_paths:
         return
 
-    touched_domains = detect_domains_in_paths(edited_paths, known_domains)
+    # discover skills from filesystem (minus excluded)
+    import os as _os
+    all_skills = {d for d in _os.listdir(SKILLS_ROOT) if _os.path.isdir(_os.path.join(SKILLS_ROOT, d))}
+    domains = {d: d for d in all_skills if d not in excluded}
+    touched_domains = detect_domains_in_paths(edited_paths, domains)
     if not touched_domains:
         return
 

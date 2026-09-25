@@ -1,0 +1,9 @@
+{
+  "name": "autodidact",
+  "description": "Procedural-memory self-improvement loop that creates and updates reusable Claude Code skills.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Wagner Sousa"
+  },
+  "license": "MIT"
+}
