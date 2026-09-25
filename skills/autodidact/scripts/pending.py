@@ -95,13 +95,13 @@ def cmd_new(args):
         "approved_at": None,
     }
     config = _load_config()
-    if (config.get("auto_create") or config.get("auto_approve")) and args.action in GENERATED_ACTIONS:
+    if config.get("auto_approve") and args.action in GENERATED_ACTIONS:
         manifest["approved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     _save_manifest(os.path.join(entry_dir, "manifest.json"), manifest)
 
     print(entry_id)
     if manifest.get("approved_at"):
-        mode = "auto-create" if _load_config().get("auto_create") else "approved"
+        mode = "auto-approved"
         print(
             f"{mode} {entry_id}: invoke skill-creator now for {args.action} "
             f"'{args.target}' — write directly to .claude/skills/{args.target}/."

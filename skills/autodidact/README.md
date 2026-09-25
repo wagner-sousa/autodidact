@@ -36,14 +36,15 @@ Override per-proposal with `pending.py new --scope project|user` (does not touch
 
 `config.json`'s `"domain_recurrence"` object (tracked in git, project-wide default):
 ```json
-{"domain_recurrence": {"min_mentions": 3, "known_domains": []}}
+{"domain_recurrence": {"min_mentions": 3, "candidate_patterns": [], "excluded_domains": []}}
 ```
 - `min_mentions` — how many times a domain can be mentioned (without an owning skill) before it fires. From that point on it fires on every subsequent mention until the skill directory exists (insistent by design).
-- `known_domains` — the terms to watch. This is the only source of domains: the plugin ships with zero project-specific paths, so nothing is auto-discovered from any directory. Accepts plain strings (`"mercadopago"`) or `{term: skill_dir_name}` maps when the spoken term differs from the skill's directory name (`{"nota fiscal": "fiscal"}`).
+- `candidate_patterns` — regexes used to extract terms. An empty list accepts any eligible term; custom patterns can narrow detection.
+- `excluded_domains` — terms ignored by recurrence detection.
 
 Once fired, the hook calls `pending.py new --action create --target <domain>` itself — staging a manifest is content-free and safe to do without user confirmation — then prints an instruction telling the agent to use `AskUserQuestion` on the staged id so the user decides to approve, reject, or defer. If a non-rejected entry for the target already exists, the hook reuses it rather than staging a duplicate. Generating actual `SKILL.md` content still requires domain knowledge only skill-creator has and happens only after approval. The full flow: hook stages request + tells agent to ask -> user approves -> agent invokes `skill-creator`, which drafts the real `SKILL.md` directly under `.claude/skills/<domain>/` -> `detect_pending_completion.py` clears the entry once it lands.
 
-No filesystem scanning of any kind happens here — `detect_domain_recurrence.py` never looks at project structure, so it works identically in any repo. Every domain it can ever watch has to be listed explicitly in `known_domains`.
+No project-specific filesystem scanning happens here; detection is driven by the configured patterns and eligible terms.
 
 State lives in `.state/domain_mentions.json`, one counter per domain; it resets automatically once `.claude/skills/<domain>/` exists, and also when the pending entry for that domain is rejected (see below) — otherwise the very next mention would immediately re-stage the same rejected request.
 
@@ -53,7 +54,7 @@ State lives in `.state/domain_mentions.json`, one counter per domain; it resets 
 
 ### Staleness detection
 
-`detect_staleness.py` (Stop hook) catches the opposite failure mode from domain recurrence: a domain that already has a skill, whose files got edited this session, but whose skill was never actually invoked via the `Skill` tool — a sign the skill might be missing the workflow that was just used. It reads the whole session transcript (every turn, not just the last one) for `Skill` tool invocations and `Edit`/`Write`/`NotebookEdit` file paths, maps edited paths to domains using the same `known_domains` config, and stages a `patch` request (reusing an existing non-rejected one if present) the same content-free way. It never proposes `create` — only `patch`, since the skill already exists.
+`detect_staleness.py` (Stop hook) catches the opposite failure mode from domain recurrence: a domain that already has a skill, whose files got edited this session, but whose skill was never actually invoked via the `Skill` tool — a sign the skill might be missing the workflow that was just used. It reads the whole session transcript (every turn, not just the last one) for `Skill` tool invocations and `Edit`/`Write`/`NotebookEdit` file paths, maps edited paths to domains using the same configured domain rules, and stages a `patch` request (reusing an existing non-rejected one if present) the same content-free way. It never proposes `create` — only `patch`, since the skill already exists.
 
 ## Claude Code (reference implementation)
 
@@ -96,24 +97,4 @@ If the host's transcript format differs, only `last_turn_tool_calls()` in `detec
 
 ## Installing in a project
 
-```bash
-cp -r skills/autodidact <target-project>/.claude/skills/
-```
-
-Then wire the hooks automatically with the install script (idempotent — safe to re-run):
-
-```bash
-# Install into project-level settings (.claude/settings.json)
-python3 .claude/skills/autodidact/scripts/install_hooks.py
-
-# Or install into user-level settings (~/.claude/settings.json)
-python3 .claude/skills/autodidact/scripts/install_hooks.py --user
-
-# Check status without writing
-python3 .claude/skills/autodidact/scripts/install_hooks.py --check
-```
-
-The script detects existing hooks by script filename (basename match), so it handles
-both relative and absolute command paths without duplicating entries.
-
-The path `.claude/skills/` above is Claude Code's layout. For other agents, copy to wherever their skills directory lives and adjust the hook command paths accordingly.
+For Claude Code, install the marketplace plugin; its `hooks/hooks.json` loads automatically. For other agents, copy `skills/autodidact/` and add equivalent hook entries manually.

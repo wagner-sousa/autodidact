@@ -44,6 +44,11 @@ STOPWORDS = {
 DEFAULT_CONFIG = {
     "min_mentions": 3,
     "excluded_domains": [],
+    "candidate_patterns": [
+        r"(?:integrar|integração|integracao|usar|conectar|conexão|conexao|sobre|skill)\s+(?:com\s+)?([a-z0-9]+(?:-[a-z0-9]+)*)",
+        r"\b(?:api|integração|integracao|skill)\s+(?:de|do|da|para|com)\s+([a-z0-9]+(?:-[a-z0-9]+)*)",
+        r"\b([a-z0-9]+(?:-[a-z0-9]+)*)\s+(?:api|integração|integracao|skill)\b",
+    ],
 }
 
 
@@ -56,28 +61,22 @@ def get_excluded_domains(config):
             vals.update(str(x).lower() for x in v.values())
     return vals
 
-def extract_candidates(prompt_text):
+def extract_candidates(prompt_text, config):
     import re as _re
-    # Hook payload may include injected context, pasted data, or code. Only
-    # inspect the user's plain text and terms named as an integration/domain.
     text = _re.sub(r"<system-reminder.*?</system-reminder>|<pasted_content[^>]*>.*?</pasted_content>|```.*?```", " ", prompt_text, flags=_re.DOTALL | _re.IGNORECASE)
     text = _re.sub(r"\[[^\]]*compressed[^\]]*\]", " ", text, flags=_re.IGNORECASE)
-    matches = []
-    patterns = (
-        r"(?:integrar|integração|integracao|usar|conectar|conexão|conexao|sobre|skill|api)\s+(?:com\s+)?([a-z0-9]+(?:-[a-z0-9]+)*)",
-        r"\b([a-z0-9]+(?:-[a-z0-9]+)*)\s+(?:api|integração|integracao|skill)\b",
-    )
-    for pattern in patterns:
-        matches.extend(_re.findall(pattern, text.lower()))
+    patterns = config.get("candidate_patterns", DEFAULT_CONFIG["candidate_patterns"])
+    if patterns:
+        matches = []
+        for pattern in patterns:
+            matches.extend(_re.findall(pattern, text.lower()))
+    else:
+        matches = _re.findall(r"\b[a-z0-9]+(?:-[a-z0-9]+)*\b", text.lower())
     return [t for t in dict.fromkeys(matches) if len(t) >= 4 and t not in STOPWORDS and not t.isdigit() and not _re.match(r"^(cu-|d\d+$)", t)]
 
 def skill_exists(skill_name):
     path = os.path.normpath(os.path.join(SKILLS_ROOT, skill_name))
     return os.path.isdir(path)
-
-
-def skill_creator_available():
-    return os.path.isdir(os.path.join(SKILLS_ROOT, "skill-creator"))
 
 
 def existing_pending_id(target):
@@ -157,7 +156,7 @@ def main():
     config = get_config()
     min_mentions = int(config.get("min_mentions", DEFAULT_CONFIG["min_mentions"]))
     excluded = get_excluded_domains(config)
-    candidates = extract_candidates(prompt_text)
+    candidates = extract_candidates(prompt_text, config)
     if not candidates:
         return
     # deduplicate while preserving order

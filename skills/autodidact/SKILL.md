@@ -65,13 +65,13 @@ For `remove_file`, add `--path <relative-path>` (the only case that needs a path
 
 After staging, read `config.json` and branch on `auto_approve`:
 
-**`auto_approve: true`** — approve immediately without asking:
+**`auto_approve: true`** — approve immediately without asking. Hooks cannot start an agent turn; the current agent must invoke `skill-creator` after approval:
 ```bash
 python3 .claude/skills/autodidact/scripts/pending.py approve <id>
 ```
 Then proceed directly into the drafting flow below. Tell the user in one line:
 ```
-autodidact: auto-approved <action> for <skill-name> (id <id>) — generating in background.
+autodidact: auto-approved <action> for <skill-name> (id <id>) — invoke skill-creator after the current task.
 ```
 
 **`auto_approve: false` (default)** — at the **end of the current task/response** (never mid-task; finish what the user asked first), use `AskUserQuestion`:
@@ -119,10 +119,9 @@ Skip the fork only for trivial hand-edits you're already confident about. If you
 
 ## Portability
 
-This skill and its scripts form a self-contained plugin: `detect_complexity.py` (Stop backstop), `inject_reminder.py` (UserPromptSubmit nudge), `detect_domain_recurrence.py` (UserPromptSubmit domain-recurrence backstop), `detect_staleness.py` (Stop hook, stages patch when a skill's domain files were edited but the skill wasn't invoked), `pending.py` (request/approval queue — reject keeps history and resets counters), `detect_pending_completion.py` (Stop hook, auto-clears approved entries once skill-creator finishes), `list_pending.py` (SessionStart visibility), `install_hooks.py` (hook installer).
+This skill and its scripts form a self-contained plugin: `detect_complexity.py` (Stop backstop), `inject_reminder.py` (UserPromptSubmit nudge), `detect_domain_recurrence.py` (UserPromptSubmit domain-recurrence backstop), `detect_staleness.py` (Stop hook, stages patch when a skill's domain files were edited but the skill wasn't invoked), `pending.py` (request/approval queue — reject keeps history and resets counters), `detect_pending_completion.py` (Stop hook, auto-clears approved entries once skill-creator finishes), `list_pending.py` (SessionStart visibility), `hooks/hooks.json` (plugin hook manifest).
 To install in a project (Claude Code, OpenCode, or any agent that supports agentskills.io + equivalent hooks):
-1. Copy this directory to `.claude/skills/autodidact/` (or equivalent skills path — see `scope` in Configuration below for `.claude/skills/` vs `~/.claude/skills/`).
-2. Run `python3 .claude/skills/autodidact/scripts/install_hooks.py` (add `--user` to wire `~/.claude/settings.json` instead of the project's) — it is idempotent, safe to re-run, and validates existing hooks before writing. Use `--check` to only report status. On agents other than Claude Code, add the hook entries from [README.md](README.md) to the project's hook config manually instead.
+For Claude Code, install the marketplace plugin; `hooks/hooks.json` loads automatically. For other agents, copy this directory to their skills path and add equivalent hook entries manually.
 
 ## Configuration
 
@@ -131,7 +130,8 @@ To install in a project (Claude Code, OpenCode, or any agent that supports agent
 | Key | Default | Effect |
 |---|---|---|
 | `scope` | `"project"` | Where skills are written: `"project"` = `.claude/skills/` (versioned, this repo only). `"user"` = `~/.claude/skills/` (survives git clone/reset, shared across projects). Override per-proposal with `pending.py new --scope project\|user`. |
-| `auto_approve` | `false` | `true` = skip `AskUserQuestion` and approve automatically right after staging; skill-creator runs immediately in background. `false` = ask via `AskUserQuestion` before approving. |
+| `auto_approve` | `false` | `true` = skip `AskUserQuestion` and approve automatically right after staging; the current agent invokes `skill-creator`. `false` = ask via `AskUserQuestion` before approving. |
+| `notify_on_create` | `true` | Prints a notice when a created or updated skill is detected on disk. |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn (see `trigger.min_file_edits`) to fire. Override with `SKILL_MANAGE_THRESHOLD` env var (overrides this key only). |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy and use the lower `min_tool_calls` bar. |
 | `trigger.readonly_threshold` | `8` | For turns with zero file edits (pure investigation), the higher tool-call bar needed to fire instead — more evidence required before proposing on a read-only turn. |

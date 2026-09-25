@@ -96,9 +96,7 @@ See `skills/autodidact/README.md` for the full explanation of each hook.
 {
   "scope": "project",
   "auto_approve": true,
-  "auto_create": true,
   "notify_on_create": true,
-  "auto_create_actions": ["create", "patch", "edit", "write_file"],
   "trigger": {
     "min_tool_calls": 5,
     "min_file_edits": 2,
@@ -111,9 +109,7 @@ See `skills/autodidact/README.md` for the full explanation of each hook.
 | --- | --- | --- |
 | `scope` | `"project"` | `"project"` = write to `.claude/skills/` (versioned, this repo only). `"user"` = write to `~/.claude/skills/` (survives clone/reset, shared across projects). |
 | `auto_approve` | `true` | Legacy approval switch; generated requests are approved automatically when enabled. |
-| `auto_create` | `true` | Automatically starts skill creation/update for generated actions. |
 | `notify_on_create` | `true` | Prints a completion notice after a skill is created or updated. |
-| `auto_create_actions` | `create`, `patch`, `edit`, `write_file` | Actions eligible for automatic creation/update. Destructive actions still require explicit approval. |
 | `trigger.min_tool_calls` | `5` | Stop-hook backstop: minimum tool calls in an edit-heavy turn to fire. |
 | `trigger.min_file_edits` | `2` | Minimum `Edit`/`Write`/`NotebookEdit` calls for a turn to count as edit-heavy. |
 | `trigger.readonly_threshold` | `8` | For read-only turns, the higher tool-call bar needed to fire instead. |
